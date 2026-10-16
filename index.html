@@ -561,6 +561,11 @@ body:not(.locked) .auth{display:none}
         try { got = parseFile(String(r.result)); }
         catch(e){ return note("bad","Não encontrei dados do controle nesse arquivo. Use um arquivo exportado por este app."); }
         if (got.state) return confirmImport(got.state);
+        if (got.vault.salt === ACCESS.salt) {
+          return crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(got.vault.iv)}, KEY, unb64(got.vault.ct))
+            .then(function(pt){ confirmImport(norm(JSON.parse(TD.decode(pt)))); })
+            .catch(function(){ note("bad","Não consegui abrir esse arquivo."); });
+        }
         note("ok", 'Arquivo protegido. Digite a senha usada nele.'+
           '<input type="password" id="dPass" autocomplete="current-password" style="margin-top:8px;width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px;font:500 16px var(--font);background:var(--card);color:var(--fg)">'+
           '<button class="btn" id="dOpen" style="margin-top:8px">Abrir arquivo</button>');
@@ -649,70 +654,72 @@ body:not(.locked) .auth{display:none}
 
   document.getElementById("openData2").onclick = openData;
 
-  /* ---------- tela de acesso ---------- */
+  /* ---------- tela de acesso: login fixo ---------- */
+  // Só o e-mail e a senha cadastrados abrem o app. Aqui fica apenas um resumo (hash) do e-mail
+  // e um teste cifrado com a senha; nem o e-mail nem a senha aparecem no arquivo.
+  var ACCESS = {"e":"36c09e31d325ac3b9e9df9fc0d8b9aaeba74e7f9e14a386c29f378b2419a7bc8","salt":"nxaom2Hm9SjGpJm3yLNL2g==","iter":600000,"iv":"A0ojgvfnBbufJk21","ct":"ao7i027QPGaI1dpNSbg+s7YlBEcgRIX+"};
+  ITER = ACCESS.iter;
+  var tries = 0, waitUntil = 0;
   var AUTHBRAND = '<div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3.2"></circle></svg></div>';
   function authEl(){ return document.getElementById("auth"); }
+  function hex(buf){ return Array.prototype.map.call(new Uint8Array(buf), function(b){ return ("0"+b.toString(16)).slice(-2); }).join(""); }
+  function checkLogin(mail, pass){
+    return crypto.subtle.digest("SHA-256", TE.encode(ACCESS.salt+":"+mail)).then(function(h){
+      if (hex(h) !== ACCESS.e) throw new Error("email");
+      var salt = unb64(ACCESS.salt);
+      return derive(pass, salt, ACCESS.iter).then(function(key){
+        return crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(ACCESS.iv)}, key, unb64(ACCESS.ct)).then(function(pt){
+          if (TD.decode(pt) !== "lente-ok") throw new Error("senha");
+          return {key:key, salt:salt};
+        });
+      });
+    });
+  }
   function showLogin(){
     authEl().innerHTML = '<form class="authcard" id="loginForm" autocomplete="on">'+AUTHBRAND+
       '<div><h2>Controle da Lente</h2><p>Entre para ver seus pagamentos.</p></div>'+
       '<label for="lEmail">E-mail<input id="lEmail" type="email" autocomplete="username" required></label>'+
       '<label for="lPass">Senha<input id="lPass" type="password" autocomplete="current-password" required></label>'+
-      '<div class="err" id="lErr"></div><button class="btn" type="submit" id="lBtn">Entrar</button>'+
-      '<button class="linkish" type="button" id="lForgot">Esqueci a senha</button></form>';
-    var em = document.getElementById("lEmail"); em.value = VAULT && VAULT.email || "";
-    (em.value ? document.getElementById("lPass") : em).focus();
+      '<div class="err" id="lErr"></div><button class="btn" type="submit" id="lBtn">Entrar</button></form>';
+    var em = document.getElementById("lEmail");
+    em.focus();
     document.getElementById("loginForm").onsubmit = function(e){
       e.preventDefault();
       var btn = document.getElementById("lBtn"), err = document.getElementById("lErr");
+      var left = Math.ceil((waitUntil - Date.now())/1000);
+      if (left > 0) { err.textContent = "Muitas tentativas. Aguarde "+left+" s."; return; }
       var mail = em.value.trim().toLowerCase(), pass = document.getElementById("lPass").value;
       btn.disabled = true; btn.textContent = "Entrando…"; err.textContent = "";
-      var fail = function(){ btn.disabled = false; btn.textContent = "Entrar"; err.textContent = "E-mail ou senha incorretos."; };
-      if (mail !== (VAULT.email||"").toLowerCase()) return setTimeout(fail, 400);
-      unseal(VAULT, pass).then(function(o){ KEY = o.key; SALT = o.salt; EMAIL = VAULT.email; ITER = VAULT.iter||ITER; state = norm(o.state); unlock(); }).catch(fail);
-    };
-    document.getElementById("lForgot").onclick = showForgot;
-  }
-  function showForgot(){
-    authEl().innerHTML = '<div class="authcard">'+AUTHBRAND+'<div><h2>Esqueci a senha</h2>'+
-      '<p>A senha não fica guardada em lugar nenhum, então não dá para recuperá-la. Sem ela, os dados deste aparelho não podem ser abertos.</p></div>'+
-      '<div class="warnbox">Se continuar, os dados deste aparelho serão apagados. Depois você cria um acesso novo e pode importar um backup, desde que lembre a senha dele.</div>'+
-      '<button class="btn" id="fWipe" style="background:var(--warn)">Apagar dados deste aparelho</button>'+
-      '<button class="linkish" id="fBack">Voltar</button></div>';
-    document.getElementById("fBack").onclick = showLogin;
-    document.getElementById("fWipe").onclick = function(){
-      try { localStorage.removeItem(LV); localStorage.removeItem(LS); } catch(e){}
-      VAULT = null; state = norm(JSON.parse(document.getElementById("state").textContent)); showCreate();
+      checkLogin(mail, pass).then(function(o){
+        tries = 0; KEY = o.key; SALT = o.salt; EMAIL = "";
+        return openDeviceData(pass);
+      }).then(unlock).catch(function(){
+        tries++; if (tries >= 5) { waitUntil = Date.now() + 30000; tries = 0; }
+        btn.disabled = false; btn.textContent = "Entrar";
+        err.textContent = "E-mail ou senha incorretos.";
+      });
     };
   }
-  function showCreate(){
-    authEl().innerHTML = '<form class="authcard" id="newForm" autocomplete="on">'+AUTHBRAND+
-      '<div><h2>Criar acesso</h2><p>Escolha um e-mail e uma senha para proteger os dados deste aparelho. Os dados ficam cifrados com essa senha.</p></div>'+
-      '<label for="nEmail">E-mail<input id="nEmail" type="email" autocomplete="username" required></label>'+
-      '<label for="nPass">Senha (mínimo 8 caracteres)<input id="nPass" type="password" autocomplete="new-password" minlength="8" required></label>'+
-      '<label for="nPass2">Repita a senha<input id="nPass2" type="password" autocomplete="new-password" required></label>'+
-      '<div class="err" id="nErr"></div><button class="btn" type="submit" id="nBtn">Criar acesso</button></form>';
-    document.getElementById("nEmail").focus();
-    document.getElementById("newForm").onsubmit = function(e){
-      e.preventDefault();
-      var mail = document.getElementById("nEmail").value.trim(), p1 = document.getElementById("nPass").value, p2 = document.getElementById("nPass2").value;
-      var err = document.getElementById("nErr");
-      if (mail.indexOf("@") < 1) return err.textContent = "Digite um e-mail válido.";
-      if (p1.length < 8) return err.textContent = "A senha precisa ter pelo menos 8 caracteres.";
-      if (p1 !== p2) return err.textContent = "As duas senhas não são iguais.";
-      var btn = document.getElementById("nBtn"); btn.disabled = true; btn.textContent = "Criando…";
-      SALT = crypto.getRandomValues(new Uint8Array(16)); EMAIL = mail;
-      derive(p1, SALT, ITER).then(function(k){
-        KEY = k;
-        // aproveita dados de uma versão anterior sem senha, se existirem neste aparelho
-        try { var old = JSON.parse(localStorage.getItem(LS) || "null"); if (valid(old)) state = norm(old); } catch(e){}
-        state.updated = state.updated || Date.now();
-        return persist();
-      }).then(unlock);
-    };
+  // carrega os dados deste aparelho com a chave do login
+  function openDeviceData(pass){
+    state = norm(JSON.parse(document.getElementById("state").textContent));
+    if (!VAULT) {
+      try { var old = JSON.parse(localStorage.getItem(LS) || "null"); if (valid(old)) state = norm(old); } catch(e){}
+      return Promise.resolve();
+    }
+    if (VAULT.salt === ACCESS.salt) {
+      return crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(VAULT.iv)}, KEY, unb64(VAULT.ct))
+        .then(function(pt){ state = norm(JSON.parse(TD.decode(pt))); });
+    }
+    // acesso criado numa versão anterior: tenta abrir com a mesma senha e passa para o login fixo
+    return unseal(VAULT, pass).then(function(o){ state = norm(o.state); }).catch(function(){
+      try { localStorage.setItem(LV + "-antigo", JSON.stringify(VAULT)); } catch(e){}
+    });
   }
   function unlock(){
     authEl().innerHTML = "";
     document.body.classList.remove("locked");
+    if (!state.updated) state.updated = Date.now();
     persist(); render(); spy();
   }
   function lock(){
@@ -739,7 +746,7 @@ body:not(.locked) .auth{display:none}
   if (embedded && embedded.ct && (!VAULT || (embedded.updated||0) > (VAULT.updated||0))) VAULT = embedded;
   if (!window.crypto || !crypto.subtle) {
     authEl().innerHTML = '<div class="authcard"><h2>Navegador sem suporte</h2><p>Abra o controle no Safari, Chrome ou Edge atualizados.</p></div>';
-  } else if (VAULT) showLogin(); else showCreate();
+  } else showLogin();
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(function(){});

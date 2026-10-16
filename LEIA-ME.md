@@ -16,15 +16,17 @@ O iPhone só instala um web app a partir de um endereço `https://`. Ele não in
 
 ## Login e senha
 
-Na primeira vez que abrir o app em cada aparelho, ele pede para **criar o acesso** com e-mail e senha. Os dados ficam cifrados com essa senha. A senha não fica guardada em lugar nenhum, nem no arquivo nem no GitHub, então não dá para recuperá-la. Se esquecer, só resta apagar os dados do aparelho e importar um backup.
+O app só abre com o e-mail e a senha cadastrados. Isso vale em qualquer aparelho, e não existe opção de criar outro acesso. O arquivo guarda apenas um resumo cifrado do login: o e-mail e a senha não aparecem nele.
 
-O app trava sozinho depois de 5 minutos fora dele. O botão de cadeado também sai na hora.
+Os dados de cada aparelho ficam cifrados com essa senha. O app trava sozinho depois de 5 minutos fora dele, e o botão de cadeado sai na hora. Depois de 5 tentativas erradas, ele espera 30 segundos.
+
+Para trocar a senha, é preciso gerar uma nova versão do `index.html`.
 
 ## Levar os dados de um aparelho para o outro
 
 1. No aparelho onde você fez as alterações, toque no botão de setas (Backup dos dados) e depois em **Exportar cópia**. No iPhone, escolha **Salvar em Arquivos** ou mande por AirDrop.
 2. No outro aparelho, abra **Backup dos dados**, toque em **Importar arquivo** e escolha o arquivo `controle-lente-AAAA-MM-DD.html`.
 
-Os backups também saem cifrados e pedem a senha que estava em uso quando foram exportados. O arquivo exportado também é o app completo: no notebook, dá para abri-lo direto e entrar com o login.
+Os backups também saem cifrados. Como todos os aparelhos usam o mesmo login, eles são importados sem pedir a senha de novo. O arquivo exportado também é o app completo: no notebook, dá para abri-lo direto e entrar com o login.
 
 Dica: exporte uma cópia de vez em quando, como segurança.
