@@ -14,11 +14,17 @@ O iPhone só instala um web app a partir de um endereço `https://`. Ele não in
 2. No iPhone, abra o endereço no **Safari**, toque em **Compartilhar** e depois em **Adicionar à Tela de Início**.
 3. Abra o app uma vez com internet. Depois disso, ele funciona offline.
 
+## Login e senha
+
+Na primeira vez que abrir o app em cada aparelho, ele pede para **criar o acesso** com e-mail e senha. Os dados ficam cifrados com essa senha. A senha não fica guardada em lugar nenhum, nem no arquivo nem no GitHub, então não dá para recuperá-la. Se esquecer, só resta apagar os dados do aparelho e importar um backup.
+
+O app trava sozinho depois de 5 minutos fora dele. O botão de cadeado também sai na hora.
+
 ## Levar os dados de um aparelho para o outro
 
 1. No aparelho onde você fez as alterações, toque no botão de setas (Backup dos dados) e depois em **Exportar cópia**. No iPhone, escolha **Salvar em Arquivos** ou mande por AirDrop.
 2. No outro aparelho, abra **Backup dos dados**, toque em **Importar arquivo** e escolha o arquivo `controle-lente-AAAA-MM-DD.html`.
 
-O arquivo exportado também é o app completo. No notebook, dá para abrir direto e ele já mostra os dados que vieram nele.
+Os backups também saem cifrados e pedem a senha que estava em uso quando foram exportados. O arquivo exportado também é o app completo: no notebook, dá para abri-lo direto e entrar com o login.
 
 Dica: exporte uma cópia de vez em quando, como segurança.

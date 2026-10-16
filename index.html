@@ -188,6 +188,21 @@ td.r,th.r{text-align:right;white-space:nowrap}
   .sched .pin{width:104px;text-align:left}
 }
 @media (max-width:400px){.big{font-size:23px}.ringwrap svg{width:150px;height:150px}}
+/* acesso */
+body.locked .outer{display:none}
+body:not(.locked) .auth{display:none}
+.auth{min-height:100vh;display:grid;place-items:center;padding-top:max(24px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.authcard{width:min(380px,100%);background:var(--card);border-radius:26px;padding:26px 22px;display:grid;gap:14px;box-shadow:0 30px 60px -30px rgba(20,24,60,.35)}
+.authcard .logo{width:46px;height:46px;border-radius:14px}
+.authcard h2{font-size:22px}
+.authcard p{margin:0;color:var(--muted);font-size:13.5px}
+.authcard label{display:grid;gap:6px;font-weight:600;font-size:13px}
+.authcard input{border:1.5px solid var(--line);border-radius:12px;padding:12px 13px;font:500 16px var(--font);background:var(--panel);color:var(--fg);width:100%}
+.authcard input:focus{border-color:var(--accent);outline:none}
+.authcard .btn{padding:13px;font-size:15px;width:100%}
+.authcard .err{color:var(--warn);font-size:13px;min-height:18px}
+.authcard .warnbox{background:var(--warn-soft);color:var(--warn);border-radius:12px;padding:10px 12px;font-size:13px}
+.linkish{background:none;border:0;color:var(--muted);font:600 13px var(--font);cursor:pointer;text-decoration:underline;justify-self:center;padding:4px}
 /* calculadora */
 .overlay{position:fixed;inset:0;z-index:50;background:rgba(10,12,24,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:grid;place-items:center;padding:16px}
 .calc{width:min(320px,100%);background:var(--card);color:var(--fg);border-radius:24px;padding:18px;box-shadow:0 30px 60px -20px rgba(0,0,0,.45);display:grid;gap:12px}
@@ -213,7 +228,8 @@ td.r,th.r{text-align:right;white-space:nowrap}
 @media (max-width:560px){.stats,.opts{grid-template-columns:1fr}.ringwrap{grid-template-columns:1fr;justify-items:center}.who span{display:none}}
 </style>
 </head>
-<body>
+<body class="locked">
+<div class="auth" id="auth"></div>
 <div class="outer"><div class="shell">
 <aside>
   <div class="brand"><div class="logo"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3.2"></circle></svg></div><div><small>Lente</small>Canon RF 70-200 f/2.8</div></div>
@@ -225,12 +241,14 @@ td.r,th.r{text-align:right;white-space:nowrap}
     <a href="#compra" data-spy="compra"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.7 5 3.3 5 1.5 5 3.5-2.2 3.2-5 3.2-5-1.3-5-3.2"></path></svg><span class="lg">Compra da lente</span><span class="sm">Compra</span></a>
     <button type="button" id="openCalc"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="3"></rect><path d="M8 7h8M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"></path></svg><span class="lg">Calculadora</span><span class="sm">Calcular</span></button>
     <button type="button" class="deskonly" id="openData2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5"></path><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>Backup dos dados</button>
+    <button type="button" class="deskonly" id="logout2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Sair</button>
   </nav>
   <div class="promo" id="promo"></div>
 </aside>
 <main id="app"></main>
 </div></div>
-<script id="state" type="application/json">{"monthly":2500,"paid":{"2026-10":1000},"choice":null,"buy":[],"updated":0}</script>
+<script id="state" type="application/json">{"monthly":2500,"paid":{},"choice":null,"buy":[],"updated":0}</script>
+<script id="vault" type="application/json">null</script>
 <script id="main">
 (function(){
   var SRC = "<!doctype html>\n" + document.documentElement.outerHTML; // cópia limpa do app, usada no backup
@@ -298,6 +316,7 @@ td.r,th.r{text-align:right;white-space:nowrap}
     clock:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>',
     sun:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>',
     data:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v13M3.5 13.5 7 17l3.5-3.5M17 20V7M13.5 10.5 17 7l3.5 3.5"></path></svg>',
+    lock:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>',
     moon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"></path></svg>'
   };
 
@@ -336,6 +355,7 @@ td.r,th.r{text-align:right;white-space:nowrap}
 
   /* ---------- tela ---------- */
   function render(){
+    if (!KEY) return;
     var c = calc(), cur = nowKey(), dark = currentTheme()==="dark";
     var saveTxt = mode==="error" ? "Não foi possível salvar" : "Salvo neste aparelho";
     var saveCls = mode==="error" ? "err" : "ok";
@@ -370,8 +390,9 @@ td.r,th.r{text-align:right;white-space:nowrap}
       '<div class="top" id="resumo"><div><div class="mbrand">Canon RF 70-200 f/2.8</div><h1>Controle de pagamento</h1><div class="date">'+today+'</div></div>'+
         '<div class="tools"><div class="save '+saveCls+'"><span class="dot"></span>'+saveTxt+'</div>'+
         '<button class="iconbtn" id="theme" title="'+(dark?"Mudar para tela clara":"Mudar para tela escura")+'" aria-label="'+(dark?"Mudar para tela clara":"Mudar para tela escura")+'">'+(dark?IC.sun:IC.moon)+'</button>'+
+        '<button class="iconbtn" id="logout" title="Sair" aria-label="Sair">'+IC.lock+'</button>'+
         '<button class="iconbtn" id="openData" title="Backup dos dados" aria-label="Backup dos dados">'+IC.data+'</button>'+
-        '<div class="who"><div class="avatar">J</div><span>Jonatas</span></div></div></div>'+
+        '</div></div>'+
       '<div class="grid">'+
         '<div class="stats">'+
           '<div class="card stat hero"><div class="row1"><div class="ico">'+IC.wallet+'</div><span class="badge w">'+Math.ceil(c.remaining/950)+' parcelas</span></div><div class="lbl">Saldo restante</div><div class="num"><span class="big">'+brl(c.remaining)+'</span><span class="muted">de '+brl(TOTAL)+'</span></div></div>'+
@@ -411,6 +432,7 @@ td.r,th.r{text-align:right;white-space:nowrap}
 
     document.getElementById("theme").onclick = toggleTheme;
     document.getElementById("openData").onclick = openData;
+    document.getElementById("logout").onclick = lock;
     var inp = document.getElementById("monthly");
     inp.addEventListener("change", function(){
       var v = parseInt(inp.value.replace(/\D/g,""),10);
@@ -441,19 +463,49 @@ td.r,th.r{text-align:right;white-space:nowrap}
 
   /* ---------- salvar neste aparelho ---------- */
   function valid(o){ return o && typeof o==="object" && +o.monthly>0 && o.paid && typeof o.paid==="object"; }
-  function persist(){
-    try { localStorage.setItem(LS, JSON.stringify(state)); mode = "local"; } catch(e){ mode = "error"; }
+  /* ---------- cofre: dados cifrados com a senha (AES-GCM, chave via PBKDF2) ---------- */
+  var LV = "lente-vault-v1", KEY = null, SALT = null, EMAIL = "", VAULT = null, ITER = 250000;
+  var TE = new TextEncoder(), TD = new TextDecoder();
+  function b64(buf){ var b = new Uint8Array(buf), t = ""; for (var i=0;i<b.length;i++) t += String.fromCharCode(b[i]); return btoa(t); }
+  function unb64(t){ var b = atob(t), u = new Uint8Array(b.length); for (var i=0;i<b.length;i++) u[i] = b.charCodeAt(i); return u; }
+  function derive(pass, salt, iter){
+    return crypto.subtle.importKey("raw", TE.encode(pass), "PBKDF2", false, ["deriveKey"]).then(function(base){
+      return crypto.subtle.deriveKey({name:"PBKDF2", salt:salt, iterations:iter, hash:"SHA-256"}, base, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+    });
   }
-  function changed(){ state.updated = Date.now(); persist(); render(); }
+  function seal(obj){
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return crypto.subtle.encrypt({name:"AES-GCM", iv:iv}, KEY, TE.encode(JSON.stringify(obj))).then(function(ct){
+      return {v:1, email:EMAIL, salt:b64(SALT), iter:ITER, iv:b64(iv), ct:b64(ct), updated:obj.updated||0};
+    });
+  }
+  function unseal(vault, pass){
+    var salt = unb64(vault.salt);
+    return derive(pass, salt, vault.iter||ITER).then(function(key){
+      return crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(vault.iv)}, key, unb64(vault.ct)).then(function(pt){
+        return {state: JSON.parse(TD.decode(pt)), key:key, salt:salt};
+      });
+    });
+  }
+  function norm(o){ if (!o.paid) o.paid = {}; if (!o.buy) o.buy = []; if (!(+o.monthly>0)) o.monthly = 2500; return o; }
+  function persist(){
+    if (!KEY) return Promise.resolve();
+    return seal(state).then(function(v){
+      VAULT = v;
+      try { localStorage.setItem(LV, JSON.stringify(v)); localStorage.removeItem(LS); mode = "local"; } catch(e){ mode = "error"; }
+    }).catch(function(){ mode = "error"; });
+  }
+  function changed(){ state.updated = Date.now(); render(); persist().then(function(){ if (mode==="error") render(); }); }
   function when(t){ if (!t) return "sem data"; var d=new Date(t); return d.toLocaleDateString("pt-BR")+" às "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); }
   function stamp(){ var d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 
   /* ---------- backup: exportar e importar ---------- */
   function exportHtml(){
-    var json = JSON.stringify(state).replace(/</g,"\\u003c");
-    return SRC.replace(/(<script id="state" type="application\/json">)[\s\S]*?(<\/script>)/, function(m,a,b){ return a+json+b; });
+    var json = JSON.stringify(VAULT).replace(/</g,"\\u003c");
+    return SRC.replace(/(<script id="vault" type="application\/json">)[\s\S]*?(<\/script>)/, function(m,a,b){ return a+json+b; });
   }
   function doExport(note){
+    if (!VAULT) return note("bad","Ainda salvando, tente de novo em instantes.");
     var name = "controle-lente-"+stamp()+".html";
     var blob = new Blob([exportHtml()], {type:"text/html"});
     var file = null;
@@ -474,12 +526,15 @@ td.r,th.r{text-align:right;white-space:nowrap}
     if (t.charAt(0)==="{") obj = JSON.parse(t);
     else {
       var doc = new DOMParser().parseFromString(text, "text/html");
+      var ve = doc.getElementById("vault"), v = null;
+      try { v = ve ? JSON.parse(ve.textContent) : null; } catch(e){}
+      if (v && v.ct) return {vault:v};
       var el = doc.getElementById("state");
       if (el) obj = JSON.parse(el.textContent);
     }
-    if (!valid(obj)) throw new Error("bad");
-    if (!obj.buy) obj.buy = [];
-    return obj;
+    if (obj && obj.ct) return {vault:obj};
+    if (!valid(obj) || !obj.updated) throw new Error("bad");
+    return {state:norm(obj)};
   }
   function openData(){
     if (document.getElementById("dataOv")) return;
@@ -502,21 +557,32 @@ td.r,th.r{text-align:right;white-space:nowrap}
       if (!f) return;
       var r = new FileReader();
       r.onload = function(){
-        var obj;
-        try { obj = parseFile(String(r.result)); }
+        var got;
+        try { got = parseFile(String(r.result)); }
         catch(e){ return note("bad","Não encontrei dados do controle nesse arquivo. Use um arquivo exportado por este app."); }
+        if (got.state) return confirmImport(got.state);
+        note("ok", 'Arquivo protegido. Digite a senha usada nele.'+
+          '<input type="password" id="dPass" autocomplete="current-password" style="margin-top:8px;width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px;font:500 16px var(--font);background:var(--card);color:var(--fg)">'+
+          '<button class="btn" id="dOpen" style="margin-top:8px">Abrir arquivo</button>');
+        document.getElementById("dPass").focus();
+        document.getElementById("dOpen").onclick = function(){
+          unseal(got.vault, document.getElementById("dPass").value).then(function(o){ confirmImport(norm(o.state)); })
+            .catch(function(){ note("bad","Senha incorreta para esse arquivo."); });
+        };
+      };
+      r.readAsText(f);
+    };
+    function confirmImport(obj){
         var older = (obj.updated||0) < (state.updated||0);
         note(older ? "bad" : "ok",
           'Arquivo salvo em <b>'+when(obj.updated)+'</b>.'+(older?' Ele é mais antigo que os dados deste aparelho.':'')+
           '<div class="row2" style="margin-top:10px"><button class="btn" id="dApply">Substituir dados</button><button class="btn ghost" id="dCancel">Cancelar</button></div>');
         document.getElementById("dApply").onclick = function(){
-          state = obj; if (!state.updated) state.updated = Date.now();
+          state = obj; state.updated = Date.now();
           persist(); render(); closeData();
         };
         document.getElementById("dCancel").onclick = function(){ document.getElementById("dMsg").innerHTML = ""; };
-      };
-      r.readAsText(f);
-    };
+    }
     document.addEventListener("keydown", dataKeys);
   }
   function dataKeys(e){ if (e.key==="Escape") closeData(); }
@@ -583,15 +649,97 @@ td.r,th.r{text-align:right;white-space:nowrap}
 
   document.getElementById("openData2").onclick = openData;
 
-  // usa o que for mais recente: os dados gravados neste aparelho ou os que vieram dentro do arquivo
-  try {
-    var saved = JSON.parse(localStorage.getItem(LS) || "null");
-    if (valid(saved) && (saved.updated||0) >= (state.updated||0)) state = saved;
-  } catch(e){}
-  if (!state.buy) state.buy = [];
-  if (!state.paid) state.paid = {};
-  persist();
-  render(); spy();
+  /* ---------- tela de acesso ---------- */
+  var AUTHBRAND = '<div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3.2"></circle></svg></div>';
+  function authEl(){ return document.getElementById("auth"); }
+  function showLogin(){
+    authEl().innerHTML = '<form class="authcard" id="loginForm" autocomplete="on">'+AUTHBRAND+
+      '<div><h2>Controle da Lente</h2><p>Entre para ver seus pagamentos.</p></div>'+
+      '<label for="lEmail">E-mail<input id="lEmail" type="email" autocomplete="username" required></label>'+
+      '<label for="lPass">Senha<input id="lPass" type="password" autocomplete="current-password" required></label>'+
+      '<div class="err" id="lErr"></div><button class="btn" type="submit" id="lBtn">Entrar</button>'+
+      '<button class="linkish" type="button" id="lForgot">Esqueci a senha</button></form>';
+    var em = document.getElementById("lEmail"); em.value = VAULT && VAULT.email || "";
+    (em.value ? document.getElementById("lPass") : em).focus();
+    document.getElementById("loginForm").onsubmit = function(e){
+      e.preventDefault();
+      var btn = document.getElementById("lBtn"), err = document.getElementById("lErr");
+      var mail = em.value.trim().toLowerCase(), pass = document.getElementById("lPass").value;
+      btn.disabled = true; btn.textContent = "Entrando…"; err.textContent = "";
+      var fail = function(){ btn.disabled = false; btn.textContent = "Entrar"; err.textContent = "E-mail ou senha incorretos."; };
+      if (mail !== (VAULT.email||"").toLowerCase()) return setTimeout(fail, 400);
+      unseal(VAULT, pass).then(function(o){ KEY = o.key; SALT = o.salt; EMAIL = VAULT.email; ITER = VAULT.iter||ITER; state = norm(o.state); unlock(); }).catch(fail);
+    };
+    document.getElementById("lForgot").onclick = showForgot;
+  }
+  function showForgot(){
+    authEl().innerHTML = '<div class="authcard">'+AUTHBRAND+'<div><h2>Esqueci a senha</h2>'+
+      '<p>A senha não fica guardada em lugar nenhum, então não dá para recuperá-la. Sem ela, os dados deste aparelho não podem ser abertos.</p></div>'+
+      '<div class="warnbox">Se continuar, os dados deste aparelho serão apagados. Depois você cria um acesso novo e pode importar um backup, desde que lembre a senha dele.</div>'+
+      '<button class="btn" id="fWipe" style="background:var(--warn)">Apagar dados deste aparelho</button>'+
+      '<button class="linkish" id="fBack">Voltar</button></div>';
+    document.getElementById("fBack").onclick = showLogin;
+    document.getElementById("fWipe").onclick = function(){
+      try { localStorage.removeItem(LV); localStorage.removeItem(LS); } catch(e){}
+      VAULT = null; state = norm(JSON.parse(document.getElementById("state").textContent)); showCreate();
+    };
+  }
+  function showCreate(){
+    authEl().innerHTML = '<form class="authcard" id="newForm" autocomplete="on">'+AUTHBRAND+
+      '<div><h2>Criar acesso</h2><p>Escolha um e-mail e uma senha para proteger os dados deste aparelho. Os dados ficam cifrados com essa senha.</p></div>'+
+      '<label for="nEmail">E-mail<input id="nEmail" type="email" autocomplete="username" required></label>'+
+      '<label for="nPass">Senha (mínimo 8 caracteres)<input id="nPass" type="password" autocomplete="new-password" minlength="8" required></label>'+
+      '<label for="nPass2">Repita a senha<input id="nPass2" type="password" autocomplete="new-password" required></label>'+
+      '<div class="err" id="nErr"></div><button class="btn" type="submit" id="nBtn">Criar acesso</button></form>';
+    document.getElementById("nEmail").focus();
+    document.getElementById("newForm").onsubmit = function(e){
+      e.preventDefault();
+      var mail = document.getElementById("nEmail").value.trim(), p1 = document.getElementById("nPass").value, p2 = document.getElementById("nPass2").value;
+      var err = document.getElementById("nErr");
+      if (mail.indexOf("@") < 1) return err.textContent = "Digite um e-mail válido.";
+      if (p1.length < 8) return err.textContent = "A senha precisa ter pelo menos 8 caracteres.";
+      if (p1 !== p2) return err.textContent = "As duas senhas não são iguais.";
+      var btn = document.getElementById("nBtn"); btn.disabled = true; btn.textContent = "Criando…";
+      SALT = crypto.getRandomValues(new Uint8Array(16)); EMAIL = mail;
+      derive(p1, SALT, ITER).then(function(k){
+        KEY = k;
+        // aproveita dados de uma versão anterior sem senha, se existirem neste aparelho
+        try { var old = JSON.parse(localStorage.getItem(LS) || "null"); if (valid(old)) state = norm(old); } catch(e){}
+        state.updated = state.updated || Date.now();
+        return persist();
+      }).then(unlock);
+    };
+  }
+  function unlock(){
+    authEl().innerHTML = "";
+    document.body.classList.remove("locked");
+    persist(); render(); spy();
+  }
+  function lock(){
+    KEY = null; SALT = null;
+    state = norm(JSON.parse(document.getElementById("state").textContent));
+    closeData(); closeCalc();
+    document.getElementById("app").innerHTML = "";
+    document.body.classList.add("locked");
+    window.scrollTo(0,0);
+    showLogin();
+  }
+  document.getElementById("logout2").onclick = lock;
+  // bloqueia sozinho depois de 5 minutos fora do app
+  var hiddenAt = 0;
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden) hiddenAt = Date.now();
+    else if (KEY && hiddenAt && Date.now() - hiddenAt > 5*60*1000) lock();
+  });
+
+  var embedded = null, localV = null;
+  try { embedded = JSON.parse(document.getElementById("vault").textContent); } catch(e){}
+  try { localV = JSON.parse(localStorage.getItem(LV) || "null"); } catch(e){}
+  VAULT = localV && localV.ct ? localV : null;
+  if (embedded && embedded.ct && (!VAULT || (embedded.updated||0) > (VAULT.updated||0))) VAULT = embedded;
+  if (!window.crypto || !crypto.subtle) {
+    authEl().innerHTML = '<div class="authcard"><h2>Navegador sem suporte</h2><p>Abra o controle no Safari, Chrome ou Edge atualizados.</p></div>';
+  } else if (VAULT) showLogin(); else showCreate();
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(function(){});
