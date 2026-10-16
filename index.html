@@ -201,8 +201,10 @@ body:not(.locked) .auth{display:none}
 .authcard input:focus{border-color:var(--accent);outline:none}
 .authcard .btn{padding:13px;font-size:15px;width:100%}
 .authcard .err{color:var(--warn);font-size:13px;min-height:18px}
-.authcard .warnbox{background:var(--warn-soft);color:var(--warn);border-radius:12px;padding:10px 12px;font-size:13px}
 .linkish{background:none;border:0;color:var(--muted);font:600 13px var(--font);cursor:pointer;text-decoration:underline;justify-self:center;padding:4px}
+.sheet .old{border:1.5px dashed var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px;font-size:13px}
+.sheet input[type=password]{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px;font:500 16px var(--font);background:var(--card);color:var(--fg)}
+@media (max-width:820px){.save.busy,.save.err{display:flex}.save{padding:7px 10px}}
 /* calculadora */
 .overlay{position:fixed;inset:0;z-index:50;background:rgba(10,12,24,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:grid;place-items:center;padding:16px}
 .calc{width:min(320px,100%);background:var(--card);color:var(--fg);border-radius:24px;padding:18px;box-shadow:0 30px 60px -20px rgba(0,0,0,.45);display:grid;gap:12px}
@@ -248,23 +250,38 @@ body:not(.locked) .auth{display:none}
 <main id="app"></main>
 </div></div>
 <script id="state" type="application/json">{"monthly":2500,"paid":{},"choice":null,"buy":[],"updated":0}</script>
-<script id="vault" type="application/json">null</script>
+<script src="config.js"></script>
 <script id="main">
 (function(){
-  var SRC = "<!doctype html>\n" + document.documentElement.outerHTML; // cópia limpa do app, usada no backup
-  var TOTAL = 24 * 950;
-  var EXTRA_KEY = "2027-04", EXTRA = 2100; // diferença paga no mês seguinte à última parcela
-  var PRIOR_COUNT = 6, PRIOR = 6 * 950;
-  var MONTHS = ["2026-10","2026-11","2026-12","2027-01","2027-02","2027-03","2027-04"];
   var MN = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
-  var RENEW = 12 * 950, BUY = 9000;
-  var START = new Date(2025,3,1), END = new Date(2027,3,1); // abr/2025 a mar/2027
+  // termos do contrato: vêm da tabela "contrato" do banco (applyContract)
+  var LENS, PARC, COUNT, TOTAL, PRIOR_COUNT, PRIOR, EXTRA_KEY, EXTRA, MONTHS, RENEW_N, RENEW, BUY, START, END, ENDK, FIRSTK;
+  function keyOf(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+  function addMonths(k, n){ var p=k.split("-"); return keyOf(new Date(+p[0], +p[1]-1+n, 1)); }
+  function lab(k){ return MN[+k.split("-")[1]-1]+"/"+k.slice(0,4); }
+  function applyContract(c){
+    LENS = c.lente || "Canon RF 70-200 f/2.8";
+    PARC = +c.parcela_valor; COUNT = +c.parcelas_total;
+    TOTAL = PARC * COUNT;
+    PRIOR_COUNT = +c.parcelas_pagas_antes; PRIOR = PRIOR_COUNT * PARC;
+    var sk = String(c.inicio).slice(0,7);
+    START = new Date(+sk.slice(0,4), +sk.slice(5,7)-1, 1);
+    END = new Date(START.getFullYear(), START.getMonth()+COUNT, 1);  // primeiro dia depois do prazo
+    ENDK = addMonths(keyOf(END), -1);                                 // último mês do contrato
+    FIRSTK = String(c.primeiro_mes_plano).slice(0,7);
+    MONTHS = [];
+    for (var k = FIRSTK; k <= ENDK && MONTHS.length < 120; k = addMonths(k,1)) MONTHS.push(k);
+    EXTRA = +c.extra_valor || 0;
+    EXTRA_KEY = EXTRA > 0 && c.extra_mes ? String(c.extra_mes).slice(0,7) : null; // diferença paga depois da última parcela
+    if (EXTRA_KEY && MONTHS.indexOf(EXTRA_KEY) < 0) MONTHS.push(EXTRA_KEY);
+    MONTHS.sort();
+    RENEW_N = +c.renovacao_parcelas; RENEW = RENEW_N * PARC; BUY = +c.compra_valor;
+  }
 
   var state;
-  try { state = JSON.parse(document.getElementById("state").textContent); } catch(e){ state = {monthly:2500,paid:{},choice:null}; }
-  if (!state.paid) state.paid = {};
-  if (!state.buy) state.buy = [];
-  var LS = "lente-state-v1", LT = "lente-theme", mode = "local";
+  function blank(){ var o; try { o = JSON.parse(document.getElementById("state").textContent); } catch(e){ o = {monthly:2500,paid:{},choice:null}; } return norm(o); }
+  state = blank();
+  var LT = "lente-theme", mode = "ok";
 
   function brl(n){ return "R$ " + Math.round(n).toLocaleString("pt-BR"); }
   function short(k){ var p=k.split("-"); var m=MN[+p[1]-1]; return m.charAt(0).toUpperCase()+m.slice(1); }
@@ -355,20 +372,20 @@ body:not(.locked) .auth{display:none}
 
   /* ---------- tela ---------- */
   function render(){
-    if (!KEY) return;
+    if (!S || !server) return;
     var c = calc(), cur = nowKey(), dark = currentTheme()==="dark";
-    var saveTxt = mode==="error" ? "Não foi possível salvar" : "Salvo neste aparelho";
-    var saveCls = mode==="error" ? "err" : "ok";
+    var saveTxt = mode==="error" ? "Sem conexão, tentando de novo" : mode==="busy" ? "Salvando…" : "Salvo no banco";
+    var saveCls = mode==="error" ? "err" : mode==="busy" ? "busy" : "ok";
     var d = new Date();
     var today = d.toLocaleDateString("pt-BR",{weekday:"long", day:"numeric", month:"long", year:"numeric"});
     today = today.charAt(0).toUpperCase()+today.slice(1);
 
     var alert = "";
-    if (c.remaining === 0) alert = '<div class="alert good"><span><b>Contrato quitado.</b> Todas as 24 parcelas estão pagas.</span></div>';
-    else if (c.gap > 0) alert = '<div class="alert warn"><span>Com <b>'+brl(state.monthly)+'/mês</b> ficam <b>'+brl(c.gap)+'</b> em aberto em abr/2027. Para quitar tudo, o valor mensal precisa ser <b>'+brl(c.need)+'</b>.</span><button class="btn ghost" id="fix">Usar '+brl(c.need)+'</button></div>';
-    else alert = '<div class="alert good"><span>Com <b>'+brl(state.monthly)+'/mês</b> o contrato fecha quitado em abr/2027, com a parcela extra de '+brl(EXTRA)+'.</span></div>';
+    if (c.remaining === 0) alert = '<div class="alert good"><span><b>Contrato quitado.</b> Todas as '+COUNT+' parcelas estão pagas.</span></div>';
+    else if (c.gap > 0) alert = '<div class="alert warn"><span>Com <b>'+brl(state.monthly)+'/mês</b> ficam <b>'+brl(c.gap)+'</b> em aberto em '+lab(MONTHS[MONTHS.length-1])+'. Para quitar tudo, o valor mensal precisa ser <b>'+brl(c.need)+'</b>.</span><button class="btn ghost" id="fix">Usar '+brl(c.need)+'</button></div>';
+    else alert = '<div class="alert good"><span>Com <b>'+brl(state.monthly)+'/mês</b> o contrato fecha quitado em '+lab(MONTHS[MONTHS.length-1])+(EXTRA?', com a parcela extra de '+brl(EXTRA):'')+'.</span></div>';
 
-    var rows = '<tr><td><div class="m">Abr/2025 – Set/2026</div><div class="muted">'+PRIOR_COUNT+' parcelas de R$ 950</div></td><td class="r">'+brl(PRIOR)+'</td><td class="r">'+brl(PRIOR)+'</td><td><span class="pill paid">Pago</span></td><td></td></tr>';
+    var rows = '<tr><td><div class="m">'+label(keyOf(START))+' – '+label(addMonths(FIRSTK,-1))+'</div><div class="muted">'+PRIOR_COUNT+' parcelas de '+brl(PARC)+'</div></td><td class="r">'+brl(PRIOR)+'</td><td class="r">'+brl(PRIOR)+'</td><td><span class="pill paid">Pago</span></td><td></td></tr>';
     MONTHS.forEach(function(k){
       var p = paidOf(k), plan = planOf(k), rest = Math.max(0, plan - p), pct = Math.min(100, p/plan*100);
       var pill = p >= plan ? '<span class="pill paid">Pago</span>'
@@ -387,7 +404,7 @@ body:not(.locked) .auth{display:none}
     var bp = state.buy.reduce(function(s,x){ return s + (+x.v||0); },0), bl = Math.max(0, BUY - bp);
     var deps = state.buy.map(function(x,i){ return {d:x.d, v:x.v, i:i}; }).sort(function(a,b){ return a.d < b.d ? 1 : -1; });
     document.getElementById("app").innerHTML =
-      '<div class="top" id="resumo"><div><div class="mbrand">Canon RF 70-200 f/2.8</div><h1>Controle de pagamento</h1><div class="date">'+today+'</div></div>'+
+      '<div class="top" id="resumo"><div><div class="mbrand">'+esc(LENS)+'</div><h1>Controle de pagamento</h1><div class="date">'+today+'</div></div>'+
         '<div class="tools"><div class="save '+saveCls+'"><span class="dot"></span>'+saveTxt+'</div>'+
         '<button class="iconbtn" id="theme" title="'+(dark?"Mudar para tela clara":"Mudar para tela escura")+'" aria-label="'+(dark?"Mudar para tela clara":"Mudar para tela escura")+'">'+(dark?IC.sun:IC.moon)+'</button>'+
         '<button class="iconbtn" id="logout" title="Sair" aria-label="Sair">'+IC.lock+'</button>'+
@@ -395,28 +412,28 @@ body:not(.locked) .auth{display:none}
         '</div></div>'+
       '<div class="grid">'+
         '<div class="stats">'+
-          '<div class="card stat hero"><div class="row1"><div class="ico">'+IC.wallet+'</div><span class="badge w">'+Math.ceil(c.remaining/950)+' parcelas</span></div><div class="lbl">Saldo restante</div><div class="num"><span class="big">'+brl(c.remaining)+'</span><span class="muted">de '+brl(TOTAL)+'</span></div></div>'+
+          '<div class="card stat hero"><div class="row1"><div class="ico">'+IC.wallet+'</div><span class="badge w">'+Math.ceil(c.remaining/PARC)+' parcelas</span></div><div class="lbl">Saldo restante</div><div class="num"><span class="big">'+brl(c.remaining)+'</span><span class="muted">de '+brl(TOTAL)+'</span></div></div>'+
           '<div class="card stat"><div class="row1"><div class="ico">'+IC.check+'</div><span class="badge g">'+(c.vp*100).toFixed(0)+'%</span></div><div class="lbl">Já pago</div><div class="num"><span class="big">'+brl(c.paid)+'</span><span class="muted">até hoje</span></div></div>'+
-          '<div class="card stat"><div class="row1"><div class="ico">'+IC.cal+'</div><span class="badge '+(c.gap>0?"r":"g")+'">'+(c.gap>0?"falta "+brl(c.gap):"fecha quitado")+'</span></div><label class="lbl" for="monthly">Pagamento mensal</label><div class="money"><span>R$</span><input id="monthly" inputmode="numeric" value="'+state.monthly+'"></div><div class="muted">out/2026 a mar/2027 + '+brl(EXTRA)+' em abr/2027</div></div>'+
-          '<div class="card stat"><div class="row1"><div class="ico">'+IC.clock+'</div><span class="badge a">'+(c.tp*100).toFixed(0)+'% do prazo</span></div><div class="lbl">Fim do contrato</div><div class="num"><span class="big">'+c.daysLeft+' dias</span><span class="muted">até 31/03/2027</span></div></div>'+
+          '<div class="card stat"><div class="row1"><div class="ico">'+IC.cal+'</div><span class="badge '+(c.gap>0?"r":"g")+'">'+(c.gap>0?"falta "+brl(c.gap):"fecha quitado")+'</span></div><label class="lbl" for="monthly">Pagamento mensal</label><div class="money"><span>R$</span><input id="monthly" inputmode="numeric" value="'+state.monthly+'"></div><div class="muted">'+lab(FIRSTK)+' a '+lab(ENDK)+(EXTRA_KEY?' + '+brl(EXTRA)+' em '+lab(EXTRA_KEY):'')+'</div></div>'+
+          '<div class="card stat"><div class="row1"><div class="ico">'+IC.clock+'</div><span class="badge a">'+(c.tp*100).toFixed(0)+'% do prazo</span></div><div class="lbl">Fim do contrato</div><div class="num"><span class="big">'+c.daysLeft+' dias</span><span class="muted">até '+new Date(END-864e5).toLocaleDateString("pt-BR")+'</span></div></div>'+
         '</div>'+
-        '<div class="card"><div class="chead"><div><h2>Progresso do contrato</h2><div class="muted">Prazo até mar/2027, pagamentos até abr/2027</div></div><span class="chip">24 meses</span></div>'+
+        '<div class="card"><div class="chead"><div><h2>Progresso do contrato</h2><div class="muted">Prazo até '+lab(ENDK)+', pagamentos até '+lab(MONTHS[MONTHS.length-1])+'</div></div><span class="chip">'+COUNT+' meses</span></div>'+
           '<div class="ringwrap">'+rings(c)+'<div class="ringtxt"><div class="big">'+(c.vp*100).toFixed(0)+'%</div><div class="muted">do valor pago</div><span class="badge '+(c.vp>=c.tp?"g":"r")+'" style="display:inline-block;margin-top:8px">'+(c.vp>=c.tp?"em dia":"atrás do prazo")+'</span></div></div>'+
           '<div class="legend">'+
-            '<div><i style="background:var(--accent)"></i><span>Prazo decorrido</span><b>'+(c.tp*100).toFixed(0)+'%</b><span class="badge a">'+Math.min(24,Math.floor(c.tp*24)+1)+'/24 meses</span></div>'+
+            '<div><i style="background:var(--accent)"></i><span>Prazo decorrido</span><b>'+(c.tp*100).toFixed(0)+'%</b><span class="badge a">'+Math.min(COUNT,Math.floor(c.tp*COUNT)+1)+'/'+COUNT+' meses</span></div>'+
             '<div><i style="background:var(--ok)"></i><span>Valor pago</span><b>'+brl(c.paid)+'</b><span class="badge g">'+(c.vp*100).toFixed(0)+'%</span></div>'+
             '<div><i style="background:var(--warn)"></i><span>Falta pagar</span><b>'+brl(c.remaining)+'</b><span class="badge r">'+(c.remaining/TOTAL*100).toFixed(0)+'%</span></div>'+
           '</div></div>'+
       '</div>'+
       alert+
-      '<div class="card chart"><div class="chead"><div><h2>Pagamentos por mês</h2><div class="muted">Previsto e pago de out/2026 a abr/2027</div></div><div class="keys"><span><i style="background:var(--track)"></i>Previsto</span><span><i style="background:var(--accent)"></i>Pago</span></div></div>'+chart()+'</div>'+
+      '<div class="card chart"><div class="chead"><div><h2>Pagamentos por mês</h2><div class="muted">Previsto e pago de '+lab(MONTHS[0])+' a '+lab(MONTHS[MONTHS.length-1])+'</div></div><div class="keys"><span><i style="background:var(--track)"></i>Previsto</span><span><i style="background:var(--accent)"></i>Pago</span></div></div>'+chart()+'</div>'+
       '<div class="card" id="pagamentos"><div class="chead"><div><h2>Cronograma</h2><div class="muted">Digite quanto pagou em cada mês. Valor menor que o previsto conta como parcial.</div></div></div>'+
         '<div class="sched"><table><thead><tr><th>Mês</th><th class="r">Previsto</th><th class="r">Pago</th><th>Situação</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'+
-      '<div class="card" id="contrato"><div class="chead"><div><h2>Fim do contrato, mar/2027</h2><div class="muted">Escolha o que fazer quando o prazo acabar</div></div></div>'+
+      '<div class="card" id="contrato"><div class="chead"><div><h2>Fim do contrato, '+lab(ENDK)+'</h2><div class="muted">Escolha o que fazer quando o prazo acabar</div></div></div>'+
         '<div class="opts">'+
-          '<button class="opt'+(ch==="renovar"?" on":"")+'" data-c="renovar"><span class="t">Renovar por 12 meses</span><span class="p">12 × R$ 950</span><span class="muted">'+brl(RENEW)+' no total, a lente continua alugada</span></button>'+
+          '<button class="opt'+(ch==="renovar"?" on":"")+'" data-c="renovar"><span class="t">Renovar por '+RENEW_N+' meses</span><span class="p">'+RENEW_N+' × '+brl(PARC)+'</span><span class="muted">'+brl(RENEW)+' no total, a lente continua alugada</span></button>'+
           '<button class="opt'+(ch==="comprar"?" on":"")+'" data-c="comprar"><span class="t">Comprar a lente</span><span class="p">'+brl(BUY)+' à vista</span><span class="muted">'+(bp>0?'Já guardado '+brl(bp)+', falta '+brl(bl):'A lente fica sua para sempre')+'</span></button>'+
-        '</div><div class="note">Comprar sai '+brl(RENEW - BUY)+' mais barato do que renovar por mais 12 meses.</div></div>'+
+        '</div><div class="note">Comprar sai '+brl(RENEW - BUY)+' mais barato do que renovar por mais '+RENEW_N+' meses.</div></div>'+
       '<div class="card" id="compra"><div class="chead"><div><h2>Compra da lente</h2><div class="muted">Guarde aos poucos para os '+brl(BUY)+' e quite o saldo no fim do contrato</div></div><span class="badge '+(bl===0?"g":"a")+'">'+(bl===0?"valor completo":(bp/BUY*100).toFixed(0)+'% guardado')+'</span></div>'+
         '<div class="buytop"><div class="box"><span class="muted">Valor da compra</span><span class="big">'+brl(BUY)+'</span></div>'+
         '<div class="box"><span class="muted">Já guardado</span><span class="big" style="color:var(--ok)">'+brl(bp)+'</span></div>'+
@@ -427,12 +444,12 @@ body:not(.locked) .auth{display:none}
         '<div class="deps">'+(deps.length?deps.map(function(x){ return '<div class="dep"><span>'+fmtDate(x.d)+'</span><b>'+brl(x.v)+'</b><button class="linkbtn" data-del="'+x.i+'" aria-label="Remover '+brl(x.v)+'">Remover</button></div>'; }).join(''):'<div class="muted" style="padding-top:6px">Nenhum valor guardado ainda. Quando sobrar um dinheiro, registre aqui.</div>')+'</div></div>';
 
     document.getElementById("promo").innerHTML =
-      '<div class="small">Depois de mar/2027</div><div class="val">'+(ch==="comprar"?"Comprar por "+brl(BUY):ch==="renovar"?"Renovar 12 × R$ 950":"Ainda não decidido")+'</div>'+
+      '<div class="small">Depois de '+lab(ENDK)+'</div><div class="val">'+(ch==="comprar"?"Comprar por "+brl(BUY):ch==="renovar"?"Renovar "+RENEW_N+" × "+brl(PARC):"Ainda não decidido")+'</div>'+
       '<a class="btn" href="#contrato" style="text-align:center;text-decoration:none">'+(ch?"Mudar escolha":"Escolher")+'</a>';
 
     document.getElementById("theme").onclick = toggleTheme;
     document.getElementById("openData").onclick = openData;
-    document.getElementById("logout").onclick = lock;
+    document.getElementById("logout").onclick = function(){ lock(true); };
     var inp = document.getElementById("monthly");
     inp.addEventListener("change", function(){
       var v = parseInt(inp.value.replace(/\D/g,""),10);
@@ -455,17 +472,167 @@ body:not(.locked) .auth{display:none}
       var v = parseInt(document.getElementById("buyAmt").value.replace(/\D/g,""),10);
       var d = document.getElementById("buyDate").value || isoToday();
       if (!(v > 0)) { document.getElementById("buyAmt").focus(); return; }
-      state.buy.push({d:d, v:v}); changed();
+      state.buy.push({id:uuid(), d:d, v:v}); changed();
     });
     document.querySelectorAll("[data-del]").forEach(function(b){ b.onclick = function(){ state.buy.splice(+b.dataset.del,1); changed(); }; });
     document.querySelectorAll("[data-c]").forEach(function(b){ b.onclick = function(){ state.choice = state.choice===b.dataset.c ? null : b.dataset.c; changed(); }; });
   }
 
-  /* ---------- salvar neste aparelho ---------- */
-  function valid(o){ return o && typeof o==="object" && +o.monthly>0 && o.paid && typeof o.paid==="object"; }
-  /* ---------- cofre: dados cifrados com a senha (AES-GCM, chave via PBKDF2) ---------- */
-  var LV = "lente-vault-v1", KEY = null, SALT = null, EMAIL = "", VAULT = null, ITER = 250000;
+  /* ---------- banco Postgres (Supabase): login no servidor e dados nas tabelas ---------- */
+  var CFG = window.LENTE_DB || {}, LC = "lente-banco", LSS = "lente-sessao";
+  if (!CFG.url || !CFG.key) { try { var lc = JSON.parse(localStorage.getItem(LC) || "null"); if (lc && lc.url && lc.key) CFG = lc; } catch(e){} }
+  var S = null;          // sessão: tokens e usuário
+  var server = null;     // o que o banco tem agora (para enviar só o que mudou)
+  var syncing = false, again = false, retryT = null, created = false;
   var TE = new TextEncoder(), TD = new TextDecoder();
+
+  function esc(t){ return String(t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function uuid(){
+    if (crypto.randomUUID) return crypto.randomUUID();
+    var b = crypto.getRandomValues(new Uint8Array(16)); b[6] = b[6]&15|64; b[8] = b[8]&63|128;
+    var h = Array.prototype.map.call(b, function(x){ return ("0"+x.toString(16)).slice(-2); }).join("");
+    return h.slice(0,8)+"-"+h.slice(8,12)+"-"+h.slice(12,16)+"-"+h.slice(16,20)+"-"+h.slice(20);
+  }
+  function valid(o){ return o && typeof o==="object" && +o.monthly>0 && o.paid && typeof o.paid==="object"; }
+  function norm(o){
+    if (!o.paid) o.paid = {}; if (!o.buy) o.buy = []; if (!(+o.monthly>0)) o.monthly = 2500;
+    Object.keys(o.paid).forEach(function(k){ var v = Math.round(+o.paid[k]); if (v > 0 && /^\d{4}-\d{2}$/.test(k)) o.paid[k] = v; else delete o.paid[k]; });
+    o.buy = o.buy.filter(function(x){ return +x.v > 0; }).map(function(x){ return {id:x.id||uuid(), d:/^\d{4}-\d{2}-\d{2}$/.test(x.d)?x.d:isoToday(), v:Math.round(+x.v)}; });
+    if (o.choice!=="renovar" && o.choice!=="comprar") o.choice = null;
+    return o;
+  }
+  function snap(st){
+    var b = {}; st.buy.forEach(function(x){ b[x.id] = x.d+"|"+x.v; });
+    return {monthly:+st.monthly, choice:st.choice||null, paid:JSON.parse(JSON.stringify(st.paid)), buy:b};
+  }
+
+  // ---- chamadas HTTP ----
+  function saveSession(){ try { localStorage.setItem(LSS, JSON.stringify({s:S, seen:Date.now()})); } catch(e){} }
+  function dropSession(){ S = null; try { localStorage.removeItem(LSS); } catch(e){} }
+  function http(path, opt){
+    opt = opt || {};
+    var h = {"apikey": CFG.key, "Content-Type": "application/json"};
+    if (opt.auth !== false && S) h.Authorization = "Bearer " + S.access_token;
+    if (opt.prefer) h.Prefer = opt.prefer;
+    return fetch(CFG.url.replace(/\/+$/,"") + path, {method:opt.method||"GET", headers:h, body:opt.body ? JSON.stringify(opt.body) : undefined})
+      .then(function(r){
+        return r.text().then(function(t){
+          var j = null; try { j = t ? JSON.parse(t) : null; } catch(e){}
+          if (!r.ok) { var e = new Error((j && (j.msg||j.message||j.error_description)) || ("HTTP "+r.status)); e.status = r.status; e.body = j; throw e; }
+          return j;
+        });
+      });
+  }
+  function takeSession(j){
+    S = {access_token:j.access_token, refresh_token:j.refresh_token,
+      expires_at: j.expires_at || Math.floor(Date.now()/1000) + (j.expires_in||3600),
+      user:{id:j.user.id, email:j.user.email}};
+    saveSession();
+  }
+  function refresh(){
+    return http("/auth/v1/token?grant_type=refresh_token", {method:"POST", auth:false, body:{refresh_token:S.refresh_token}}).then(takeSession);
+  }
+  function api(path, opt){
+    if (!S) return Promise.reject(new Error("sem sessão"));
+    var pre = S.expires_at - 60 < Date.now()/1000 ? refresh() : Promise.resolve();
+    return pre.then(function(){ return http(path, opt); }).catch(function(e){
+      if (e.status !== 401) throw e;
+      return refresh().then(function(){ return http(path, opt); }, function(e2){
+        if (e2.status === 400 || e2.status === 401) { lock(false); e2.expired = true; }
+        throw e2;
+      });
+    });
+  }
+
+  // ---- ler tudo do banco ----
+  function load(){
+    created = false;
+    return api("/rest/v1/contrato?select=*").then(function(rows){
+      if (rows && rows.length) return rows[0];
+      created = true;  // primeiro acesso: cria o contrato com os valores padrão do banco
+      return api("/rest/v1/contrato?select=*", {method:"POST", body:{}, prefer:"return=representation"}).then(function(r){ return r[0]; });
+    }).then(function(c){
+      return Promise.all([
+        api("/rest/v1/pagamentos?select=mes,valor"),
+        api("/rest/v1/reserva_compra?select=id,data,valor&order=data.asc,criado_em.asc")
+      ]).then(function(r){
+        applyContract(c);
+        var st = {monthly:Math.round(+c.mensalidade), choice:c.escolha||null, paid:{}, buy:[], updated:Date.parse(c.atualizado_em)||0};
+        r[0].forEach(function(p){ st.paid[String(p.mes).slice(0,7)] = Math.round(+p.valor); });
+        r[1].forEach(function(b){ st.buy.push({id:b.id, d:String(b.data).slice(0,10), v:Math.round(+b.valor)}); });
+        state = st; server = snap(st);
+      });
+    });
+  }
+
+  // ---- gravar: envia só a diferença entre a tela e o banco ----
+  function pending(){
+    if (!server) return [];
+    var cur = snap(state), ops = [];
+    if (cur.monthly !== server.monthly || cur.choice !== server.choice) ops.push({t:"contrato", monthly:cur.monthly, choice:cur.choice});
+    var up = [], del = [];
+    Object.keys(cur.paid).forEach(function(k){ if (cur.paid[k] !== server.paid[k]) up.push(k); });
+    Object.keys(server.paid).forEach(function(k){ if (!(k in cur.paid)) del.push(k); });
+    if (up.length) ops.push({t:"pagUp", keys:up, vals:up.map(function(k){ return cur.paid[k]; })});
+    if (del.length) ops.push({t:"pagDel", keys:del});
+    var add = [], rm = [];
+    Object.keys(cur.buy).forEach(function(id){ if (server.buy[id] !== cur.buy[id]) { add.push(id); if (id in server.buy) rm.push(id); } });
+    Object.keys(server.buy).forEach(function(id){ if (!(id in cur.buy)) rm.push(id); });
+    if (rm.length) ops.push({t:"resDel", ids:rm});
+    if (add.length) ops.push({t:"resAdd", rows:add.map(function(id){ var p = cur.buy[id].split("|"); return {id:id, d:p[0], v:+p[1]}; })});
+    return ops;
+  }
+  function run(op){
+    if (op.t === "contrato")
+      return api("/rest/v1/contrato?user_id=eq."+S.user.id, {method:"PATCH", body:{mensalidade:op.monthly, escolha:op.choice}})
+        .then(function(){ server.monthly = op.monthly; server.choice = op.choice; });
+    if (op.t === "pagUp")
+      return api("/rest/v1/pagamentos?on_conflict=user_id,mes", {method:"POST", prefer:"resolution=merge-duplicates",
+        body:op.keys.map(function(k,i){ return {user_id:S.user.id, mes:k+"-01", valor:op.vals[i]}; })})
+        .then(function(){ op.keys.forEach(function(k,i){ server.paid[k] = op.vals[i]; }); });
+    if (op.t === "pagDel")
+      return api("/rest/v1/pagamentos?mes=in.("+op.keys.map(function(k){ return k+"-01"; }).join(",")+")", {method:"DELETE"})
+        .then(function(){ op.keys.forEach(function(k){ delete server.paid[k]; }); });
+    if (op.t === "resDel")
+      return api("/rest/v1/reserva_compra?id=in.("+op.ids.join(",")+")", {method:"DELETE"})
+        .then(function(){ op.ids.forEach(function(id){ delete server.buy[id]; }); });
+    if (op.t === "resAdd")
+      return api("/rest/v1/reserva_compra", {method:"POST", body:op.rows.map(function(x){ return {id:x.id, user_id:S.user.id, data:x.d, valor:x.v}; })})
+        .then(function(){ op.rows.forEach(function(x){ server.buy[x.id] = x.d+"|"+x.v; }); });
+  }
+  function sync(){
+    if (!S || !server) return Promise.resolve();
+    if (syncing) { again = true; return Promise.resolve(); }
+    var ops = pending();
+    if (!ops.length) { if (mode !== "ok") { mode = "ok"; render(); } return Promise.resolve(); }
+    syncing = true; clearTimeout(retryT);
+    if (mode !== "busy") { mode = "busy"; render(); }
+    var chain = Promise.resolve();
+    ops.forEach(function(op){ chain = chain.then(function(){ return run(op); }); });
+    return chain.then(function(){
+      syncing = false; mode = "ok";
+      if (again) { again = false; return sync(); }
+      render();
+    }, function(e){
+      syncing = false; again = false;
+      if (!S) return;
+      mode = "error"; render();
+      retryT = setTimeout(sync, 15000);  // tenta de novo sozinho
+    });
+  }
+  function changed(){ state.updated = Date.now(); render(); sync(); }
+  window.addEventListener("online", function(){ sync(); });
+
+  // busca alterações feitas em outro aparelho
+  function reload(){
+    if (!S || syncing || pending().length) return;
+    var a = document.activeElement;
+    if (a && a.tagName === "INPUT" && document.getElementById("app").contains(a)) return;
+    load().then(function(){ mode = "ok"; render(); }).catch(function(){});
+  }
+  setInterval(function(){ if (!document.hidden) reload(); }, 60000);
+
+  // ---- dados da versão anterior guardados neste aparelho ----
   function b64(buf){ var b = new Uint8Array(buf), t = ""; for (var i=0;i<b.length;i++) t += String.fromCharCode(b[i]); return btoa(t); }
   function unb64(t){ var b = atob(t), u = new Uint8Array(b.length); for (var i=0;i<b.length;i++) u[i] = b.charCodeAt(i); return u; }
   function derive(pass, salt, iter){
@@ -473,43 +640,137 @@ body:not(.locked) .auth{display:none}
       return crypto.subtle.deriveKey({name:"PBKDF2", salt:salt, iterations:iter, hash:"SHA-256"}, base, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
     });
   }
-  function seal(obj){
-    var iv = crypto.getRandomValues(new Uint8Array(12));
-    return crypto.subtle.encrypt({name:"AES-GCM", iv:iv}, KEY, TE.encode(JSON.stringify(obj))).then(function(ct){
-      return {v:1, email:EMAIL, salt:b64(SALT), iter:ITER, iv:b64(iv), ct:b64(ct), updated:obj.updated||0};
-    });
-  }
   function unseal(vault, pass){
-    var salt = unb64(vault.salt);
-    return derive(pass, salt, vault.iter||ITER).then(function(key){
+    return derive(pass, unb64(vault.salt), vault.iter||250000).then(function(key){
       return crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(vault.iv)}, key, unb64(vault.ct)).then(function(pt){
-        return {state: JSON.parse(TD.decode(pt)), key:key, salt:salt};
+        return {state: JSON.parse(TD.decode(pt))};
       });
     });
   }
-  function norm(o){ if (!o.paid) o.paid = {}; if (!o.buy) o.buy = []; if (!(+o.monthly>0)) o.monthly = 2500; return o; }
-  function persist(){
-    if (!KEY) return Promise.resolve();
-    return seal(state).then(function(v){
-      VAULT = v;
-      try { localStorage.setItem(LV, JSON.stringify(v)); localStorage.removeItem(LS); mode = "local"; } catch(e){ mode = "error"; }
-    }).catch(function(){ mode = "error"; });
+  function oldVault(){ try { var v = JSON.parse(localStorage.getItem("lente-vault-v1") || "null"); return v && v.ct ? v : null; } catch(e){ return null; } }
+  function forgetLocal(){
+    ["lente-vault-v1","lente-vault-v1-antigo","lente-state-v1","lente-gh-v1"].forEach(function(k){ try { localStorage.removeItem(k); } catch(e){} });
   }
-  function changed(){ state.updated = Date.now(); render(); persist().then(function(){ if (mode==="error") render(); }); }
+  // no primeiro acesso, leva para o banco o que este aparelho tinha guardado
+  function migrate(pass){
+    var empty = !Object.keys(state.paid).length && !state.buy.length && !state.choice;
+    var old = null, plain = null;
+    try { plain = JSON.parse(localStorage.getItem("lente-state-v1") || "null"); } catch(e){}
+    var v = oldVault();
+    if (!empty || (!v && !valid(plain))) { if (!empty) forgetLocal(); return Promise.resolve(); }
+    var get = v ? unseal(v, pass).then(function(o){ return o.state; }) : Promise.resolve(plain);
+    return get.then(function(o){
+      if (!valid(o)) return;
+      state = norm(o); state.updated = Date.now();
+      return sync().then(function(){ if (!pending().length) forgetLocal(); });
+    }).catch(function(){ /* senha diferente da antiga: fica disponível em Backup dos dados */ });
+  }
+
+  // ---- telas de acesso ----
+  var tries = 0, waitUntil = 0;
+  var AUTHBRAND = '<div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3.2"></circle></svg></div>';
+  function authEl(){ return document.getElementById("auth"); }
+  function showSetup(){
+    authEl().innerHTML = '<form class="authcard" id="cfgForm">'+AUTHBRAND+
+      '<div><h2>Conectar ao banco</h2><p>Cole o endereço e a chave pública (anon ou publishable) do projeto no Supabase. Fica salvo neste aparelho.</p></div>'+
+      '<label for="cUrl">Project URL<input id="cUrl" type="url" placeholder="https://xxxx.supabase.co" required></label>'+
+      '<label for="cKey">Chave pública<input id="cKey" required autocomplete="off"></label>'+
+      '<div class="err" id="cErr"></div><button class="btn" type="submit">Continuar</button></form>';
+    document.getElementById("cfgForm").onsubmit = function(e){
+      e.preventDefault();
+      var u = document.getElementById("cUrl").value.trim().replace(/\/+$/,""), k = document.getElementById("cKey").value.trim();
+      if (!/^https:\/\/[^\s/]+$/.test(u)) { document.getElementById("cErr").textContent = "Use o endereço completo, começando com https://"; return; }
+      if (/service_role|sb_secret_/.test(k) || /"role"\s*:\s*"service_role"/.test(atobSafe(k.split(".")[1]||""))) { document.getElementById("cErr").textContent = "Essa é a chave secreta. Use a chave pública (anon ou publishable)."; return; }
+      CFG = {url:u, key:k};
+      try { localStorage.setItem(LC, JSON.stringify(CFG)); } catch(e){}
+      showLogin();
+    };
+  }
+  function atobSafe(t){ try { return atob(t.replace(/-/g,"+").replace(/_/g,"/")); } catch(e){ return ""; } }
+  function showLogin(msg){
+    authEl().innerHTML = '<form class="authcard" id="loginForm" autocomplete="on">'+AUTHBRAND+
+      '<div><h2>Controle da Lente</h2><p>Entre para ver seus pagamentos.</p></div>'+
+      '<label for="lEmail">E-mail<input id="lEmail" type="email" autocomplete="username" required></label>'+
+      '<label for="lPass">Senha<input id="lPass" type="password" autocomplete="current-password" required></label>'+
+      '<div class="err" id="lErr">'+(msg||"")+'</div><button class="btn" type="submit" id="lBtn">Entrar</button>'+
+      (window.LENTE_DB && window.LENTE_DB.url ? '' : '<button type="button" class="linkish" id="lCfg">Trocar banco</button>')+'</form>';
+    var em = document.getElementById("lEmail");
+    em.focus();
+    var cf = document.getElementById("lCfg");
+    if (cf) cf.onclick = function(){ try { localStorage.removeItem(LC); } catch(e){} showSetup(); };
+    document.getElementById("loginForm").onsubmit = function(e){
+      e.preventDefault();
+      var btn = document.getElementById("lBtn"), err = document.getElementById("lErr");
+      var left = Math.ceil((waitUntil - Date.now())/1000);
+      if (left > 0) { err.textContent = "Muitas tentativas. Aguarde "+left+" s."; return; }
+      var mail = em.value.trim().toLowerCase(), pass = document.getElementById("lPass").value;
+      btn.disabled = true; btn.textContent = "Entrando…"; err.textContent = "";
+      http("/auth/v1/token?grant_type=password", {method:"POST", auth:false, body:{email:mail, password:pass}})
+        .then(function(j){ tries = 0; takeSession(j); return load(); })
+        .then(function(){ return migrate(pass); })
+        .then(unlock)
+        .catch(function(e){
+          var bad = e.status === 400 || e.status === 401 || e.status === 422;
+          if (bad) { tries++; if (tries >= 5) { waitUntil = Date.now() + 30000; tries = 0; } }
+          if (S && !bad) dropSession();
+          btn.disabled = false; btn.textContent = "Entrar";
+          err.textContent = bad ? "E-mail ou senha incorretos." : e.status === 429 ? "Muitas tentativas. Aguarde um pouco." : "Não foi possível falar com o banco. Verifique a internet.";
+        });
+    };
+  }
+  function unlock(){
+    authEl().innerHTML = "";
+    document.body.classList.remove("locked");
+    mode = pending().length ? "error" : "ok";
+    render(); spy();
+  }
+  function lock(manual){
+    if (manual && S) http("/auth/v1/logout?scope=local", {method:"POST"}).catch(function(){});
+    dropSession(); server = null; state = blank(); clearTimeout(retryT);
+    closeData(); closeCalc();
+    document.getElementById("app").innerHTML = "";
+    document.getElementById("promo").innerHTML = "";
+    document.body.classList.add("locked");
+    window.scrollTo(0,0);
+    showLogin(manual ? "" : "Sessão encerrada. Entre de novo.");
+  }
+  document.getElementById("logout2").onclick = function(){ lock(true); };
+  // bloqueia sozinho depois de 5 minutos fora do app
+  var hiddenAt = 0;
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden) { hiddenAt = Date.now(); if (S) saveSession(); }
+    else if (S && hiddenAt && Date.now() - hiddenAt > 5*60*1000) lock(true);
+    else if (S) reload();
+  });
+  function start(){
+    forgetLocalSecrets();
+    if (!window.fetch || !window.crypto || !crypto.subtle) {
+      authEl().innerHTML = '<div class="authcard"><h2>Navegador sem suporte</h2><p>Abra o controle no Safari, Chrome ou Edge atualizados.</p></div>'; return;
+    }
+    if (!CFG.url || !CFG.key) return showSetup();
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(LSS) || "null"); } catch(e){}
+    if (!saved || !saved.s || Date.now() - (saved.seen||0) > 5*60*1000) { dropSession(); return showLogin(); }
+    S = saved.s;
+    authEl().innerHTML = '<div class="authcard">'+AUTHBRAND+'<p>Carregando…</p></div>';
+    refresh().then(load).then(unlock).catch(function(){ dropSession(); showLogin(); });
+  }
+  // o token do GitHub da versão anterior não é mais usado
+  function forgetLocalSecrets(){ try { localStorage.removeItem("lente-gh-v1"); } catch(e){} }
+
   function when(t){ if (!t) return "sem data"; var d=new Date(t); return d.toLocaleDateString("pt-BR")+" às "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); }
   function stamp(){ var d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 
   /* ---------- backup: exportar e importar ---------- */
-  function exportHtml(){
-    var json = JSON.stringify(VAULT).replace(/</g,"\\u003c");
-    return SRC.replace(/(<script id="vault" type="application\/json">)[\s\S]*?(<\/script>)/, function(m,a,b){ return a+json+b; });
+  function exportJson(){
+    return JSON.stringify({monthly:state.monthly, paid:state.paid, choice:state.choice||null,
+      buy:state.buy.map(function(x){ return {d:x.d, v:x.v}; }), updated:Date.now()}, null, 2);
   }
   function doExport(note){
-    if (!VAULT) return note("bad","Ainda salvando, tente de novo em instantes.");
-    var name = "controle-lente-"+stamp()+".html";
-    var blob = new Blob([exportHtml()], {type:"text/html"});
+    var name = "controle-lente-"+stamp()+".json";
+    var blob = new Blob([exportJson()], {type:"application/json"});
     var file = null;
-    try { file = new File([blob], name, {type:"text/html"}); } catch(e){}
+    try { file = new File([blob], name, {type:"application/json"}); } catch(e){}
     if (file && navigator.canShare && navigator.canShare({files:[file]})) {
       navigator.share({files:[file], title:"Controle da Lente"}).then(function(){ note("ok","Cópia pronta. Escolha “Salvar em Arquivos” ou envie para o notebook."); })
         .catch(function(e){ if (!e || e.name!=="AbortError") fallback(); });
@@ -533,7 +794,7 @@ body:not(.locked) .auth{display:none}
       if (el) obj = JSON.parse(el.textContent);
     }
     if (obj && obj.ct) return {vault:obj};
-    if (!valid(obj) || !obj.updated) throw new Error("bad");
+    if (!valid(obj)) throw new Error("bad");
     return {state:norm(obj)};
   }
   function openData(){
@@ -541,10 +802,11 @@ body:not(.locked) .auth{display:none}
     var ov = document.createElement("div"); ov.className="overlay"; ov.id="dataOv";
     ov.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-label="Backup dos dados">'+
       '<div class="chead" style="margin:0"><h2>Backup dos dados</h2><button class="iconbtn" id="dClose" aria-label="Fechar" style="width:34px;height:34px">×</button></div>'+
-      '<p>Os dados ficam só neste aparelho. Para levar ao celular ou ao notebook, exporte uma cópia aqui e importe o arquivo no outro aparelho.</p>'+
-      '<div class="info"><span><b>Última alteração:</b> '+when(state.updated)+'</span><span><b>Já pago:</b> '+brl(calc().paid)+' · <b>Guardado para compra:</b> '+brl(state.buy.reduce(function(s,x){return s+(+x.v||0);},0))+'</span></div>'+
-      '<div class="row2"><button class="btn" id="dExport">Exportar cópia</button><button class="btn soft" id="dImport">Importar arquivo</button></div>'+
+      '<p>Os dados ficam no banco e aparecem em todos os aparelhos depois do login. Aqui você baixa uma cópia em arquivo ou importa um backup antigo.</p>'+
+      '<div class="info"><span><b>Conta:</b> '+esc(S.user.email||"")+'</span><span><b>Última alteração:</b> '+when(state.updated)+'</span><span><b>Já pago:</b> '+brl(calc().paid)+' · <b>Guardado para compra:</b> '+brl(state.buy.reduce(function(s,x){return s+(+x.v||0);},0))+'</span></div>'+
+      '<div class="row2"><button class="btn" id="dExport">Baixar cópia</button><button class="btn soft" id="dImport">Importar arquivo</button></div>'+
       '<input type="file" id="dFile" accept=".html,.htm,.json,text/html,application/json" hidden>'+
+      (oldVault() ? '<div class="old" id="dOld"><span><b>Dados da versão anterior neste aparelho.</b> Envie para o banco com a senha que você usava antes.</span><button class="btn soft" id="dOldBtn">Enviar para o banco</button></div>' : '')+
       '<div id="dMsg"></div></div>';
     document.body.appendChild(ov);
     function note(kind, html){ document.getElementById("dMsg").innerHTML = '<div class="msg '+kind+'">'+html+'</div>'; }
@@ -552,6 +814,18 @@ body:not(.locked) .auth{display:none}
     document.getElementById("dClose").onclick = closeData;
     document.getElementById("dExport").onclick = function(){ doExport(note); };
     document.getElementById("dImport").onclick = function(){ document.getElementById("dFile").click(); };
+    var ob = document.getElementById("dOldBtn");
+    if (ob) ob.onclick = function(){ askVault(oldVault()); };
+    function askVault(vault){
+      note("ok", 'Arquivo protegido. Digite a senha usada nele.'+
+        '<input type="password" id="dPass" autocomplete="current-password" style="margin-top:8px">'+
+        '<button class="btn" id="dOpen" style="margin-top:8px">Abrir</button>');
+      document.getElementById("dPass").focus();
+      document.getElementById("dOpen").onclick = function(){
+        unseal(vault, document.getElementById("dPass").value).then(function(o){ confirmImport(norm(o.state)); })
+          .catch(function(){ note("bad","Senha incorreta para esses dados."); });
+      };
+    }
     document.getElementById("dFile").onchange = function(){
       var f = this.files && this.files[0]; this.value = "";
       if (!f) return;
@@ -560,31 +834,20 @@ body:not(.locked) .auth{display:none}
         var got;
         try { got = parseFile(String(r.result)); }
         catch(e){ return note("bad","Não encontrei dados do controle nesse arquivo. Use um arquivo exportado por este app."); }
-        if (got.state) return confirmImport(got.state);
-        if (got.vault.salt === ACCESS.salt) {
-          return crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(got.vault.iv)}, KEY, unb64(got.vault.ct))
-            .then(function(pt){ confirmImport(norm(JSON.parse(TD.decode(pt)))); })
-            .catch(function(){ note("bad","Não consegui abrir esse arquivo."); });
-        }
-        note("ok", 'Arquivo protegido. Digite a senha usada nele.'+
-          '<input type="password" id="dPass" autocomplete="current-password" style="margin-top:8px;width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px;font:500 16px var(--font);background:var(--card);color:var(--fg)">'+
-          '<button class="btn" id="dOpen" style="margin-top:8px">Abrir arquivo</button>');
-        document.getElementById("dPass").focus();
-        document.getElementById("dOpen").onclick = function(){
-          unseal(got.vault, document.getElementById("dPass").value).then(function(o){ confirmImport(norm(o.state)); })
-            .catch(function(){ note("bad","Senha incorreta para esse arquivo."); });
-        };
+        if (got.vault) return askVault(got.vault);
+        confirmImport(got.state);
       };
       r.readAsText(f);
     };
     function confirmImport(obj){
         var older = (obj.updated||0) < (state.updated||0);
         note(older ? "bad" : "ok",
-          'Arquivo salvo em <b>'+when(obj.updated)+'</b>.'+(older?' Ele é mais antigo que os dados deste aparelho.':'')+
+          'Dados salvos em <b>'+when(obj.updated)+'</b>.'+(older?' Eles são mais antigos que os dados do banco.':'')+' Substituir troca tudo o que está no banco por eles.'+
           '<div class="row2" style="margin-top:10px"><button class="btn" id="dApply">Substituir dados</button><button class="btn ghost" id="dCancel">Cancelar</button></div>');
         document.getElementById("dApply").onclick = function(){
           state = obj; state.updated = Date.now();
-          persist(); render(); closeData();
+          closeData(); changed();
+          if (oldVault()) forgetLocal();
         };
         document.getElementById("dCancel").onclick = function(){ document.getElementById("dMsg").innerHTML = ""; };
     }
@@ -654,99 +917,7 @@ body:not(.locked) .auth{display:none}
 
   document.getElementById("openData2").onclick = openData;
 
-  /* ---------- tela de acesso: login fixo ---------- */
-  // Só o e-mail e a senha cadastrados abrem o app. Aqui fica apenas um resumo (hash) do e-mail
-  // e um teste cifrado com a senha; nem o e-mail nem a senha aparecem no arquivo.
-  var ACCESS = {"e":"36c09e31d325ac3b9e9df9fc0d8b9aaeba74e7f9e14a386c29f378b2419a7bc8","salt":"nxaom2Hm9SjGpJm3yLNL2g==","iter":600000,"iv":"A0ojgvfnBbufJk21","ct":"ao7i027QPGaI1dpNSbg+s7YlBEcgRIX+"};
-  ITER = ACCESS.iter;
-  var tries = 0, waitUntil = 0;
-  var AUTHBRAND = '<div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3.2"></circle></svg></div>';
-  function authEl(){ return document.getElementById("auth"); }
-  function hex(buf){ return Array.prototype.map.call(new Uint8Array(buf), function(b){ return ("0"+b.toString(16)).slice(-2); }).join(""); }
-  function checkLogin(mail, pass){
-    return crypto.subtle.digest("SHA-256", TE.encode(ACCESS.salt+":"+mail)).then(function(h){
-      if (hex(h) !== ACCESS.e) throw new Error("email");
-      var salt = unb64(ACCESS.salt);
-      return derive(pass, salt, ACCESS.iter).then(function(key){
-        return crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(ACCESS.iv)}, key, unb64(ACCESS.ct)).then(function(pt){
-          if (TD.decode(pt) !== "lente-ok") throw new Error("senha");
-          return {key:key, salt:salt};
-        });
-      });
-    });
-  }
-  function showLogin(){
-    authEl().innerHTML = '<form class="authcard" id="loginForm" autocomplete="on">'+AUTHBRAND+
-      '<div><h2>Controle da Lente</h2><p>Entre para ver seus pagamentos.</p></div>'+
-      '<label for="lEmail">E-mail<input id="lEmail" type="email" autocomplete="username" required></label>'+
-      '<label for="lPass">Senha<input id="lPass" type="password" autocomplete="current-password" required></label>'+
-      '<div class="err" id="lErr"></div><button class="btn" type="submit" id="lBtn">Entrar</button></form>';
-    var em = document.getElementById("lEmail");
-    em.focus();
-    document.getElementById("loginForm").onsubmit = function(e){
-      e.preventDefault();
-      var btn = document.getElementById("lBtn"), err = document.getElementById("lErr");
-      var left = Math.ceil((waitUntil - Date.now())/1000);
-      if (left > 0) { err.textContent = "Muitas tentativas. Aguarde "+left+" s."; return; }
-      var mail = em.value.trim().toLowerCase(), pass = document.getElementById("lPass").value;
-      btn.disabled = true; btn.textContent = "Entrando…"; err.textContent = "";
-      checkLogin(mail, pass).then(function(o){
-        tries = 0; KEY = o.key; SALT = o.salt; EMAIL = "";
-        return openDeviceData(pass);
-      }).then(unlock).catch(function(){
-        tries++; if (tries >= 5) { waitUntil = Date.now() + 30000; tries = 0; }
-        btn.disabled = false; btn.textContent = "Entrar";
-        err.textContent = "E-mail ou senha incorretos.";
-      });
-    };
-  }
-  // carrega os dados deste aparelho com a chave do login
-  function openDeviceData(pass){
-    state = norm(JSON.parse(document.getElementById("state").textContent));
-    if (!VAULT) {
-      try { var old = JSON.parse(localStorage.getItem(LS) || "null"); if (valid(old)) state = norm(old); } catch(e){}
-      return Promise.resolve();
-    }
-    if (VAULT.salt === ACCESS.salt) {
-      return crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(VAULT.iv)}, KEY, unb64(VAULT.ct))
-        .then(function(pt){ state = norm(JSON.parse(TD.decode(pt))); });
-    }
-    // acesso criado numa versão anterior: tenta abrir com a mesma senha e passa para o login fixo
-    return unseal(VAULT, pass).then(function(o){ state = norm(o.state); }).catch(function(){
-      try { localStorage.setItem(LV + "-antigo", JSON.stringify(VAULT)); } catch(e){}
-    });
-  }
-  function unlock(){
-    authEl().innerHTML = "";
-    document.body.classList.remove("locked");
-    if (!state.updated) state.updated = Date.now();
-    persist(); render(); spy();
-  }
-  function lock(){
-    KEY = null; SALT = null;
-    state = norm(JSON.parse(document.getElementById("state").textContent));
-    closeData(); closeCalc();
-    document.getElementById("app").innerHTML = "";
-    document.body.classList.add("locked");
-    window.scrollTo(0,0);
-    showLogin();
-  }
-  document.getElementById("logout2").onclick = lock;
-  // bloqueia sozinho depois de 5 minutos fora do app
-  var hiddenAt = 0;
-  document.addEventListener("visibilitychange", function(){
-    if (document.hidden) hiddenAt = Date.now();
-    else if (KEY && hiddenAt && Date.now() - hiddenAt > 5*60*1000) lock();
-  });
-
-  var embedded = null, localV = null;
-  try { embedded = JSON.parse(document.getElementById("vault").textContent); } catch(e){}
-  try { localV = JSON.parse(localStorage.getItem(LV) || "null"); } catch(e){}
-  VAULT = localV && localV.ct ? localV : null;
-  if (embedded && embedded.ct && (!VAULT || (embedded.updated||0) > (VAULT.updated||0))) VAULT = embedded;
-  if (!window.crypto || !crypto.subtle) {
-    authEl().innerHTML = '<div class="authcard"><h2>Navegador sem suporte</h2><p>Abra o controle no Safari, Chrome ou Edge atualizados.</p></div>';
-  } else showLogin();
+  start();
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(function(){});
