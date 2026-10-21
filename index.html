@@ -251,6 +251,7 @@ body:not(.locked) .auth{display:none}
 .newitem,.editp{background:var(--panel);border-radius:16px;padding:14px;margin-top:12px}
 .newitem input,.editp input{background:var(--card)}
 .ftitle{width:100%;font-size:14px}
+.tag.o{background:var(--part-soft);color:var(--part)}
 a.dep{color:inherit;text-decoration:none;border-radius:10px}
 a.dep:hover b{color:var(--accent)}
 .buyform select{border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--panel);color:var(--fg);font:600 14px var(--font)}
@@ -288,7 +289,7 @@ a.dep:hover b{color:var(--accent)}
   <nav class="menu">
     <div class="cap">Menu</div>
     <a href="#geral" data-spy="geral"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect></svg><span class="lg">Visão geral</span><span class="sm">Geral</span></a>
-    <a href="#pessoas" data-spy="pessoas"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M21 20c0-2.6-1.6-4.8-4-5.6"></path></svg><span class="lg">Pessoas</span><span class="sm">Pessoas</span></a>
+    <a href="#clientes" data-spy="pessoas"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7M21 20c0-2.6-1.6-4.8-4-5.6"></path></svg><span class="lg">Clientes</span><span class="sm">Clientes</span></a>
     <button type="button" id="openCalc"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="3"></rect><path d="M8 7h8M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"></path></svg><span class="lg">Calculadora</span><span class="sm">Calcular</span></button>
     <button type="button" class="deskonly" id="openData2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5"></path><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>Backup dos dados</button>
     <button type="button" class="deskonly" id="logout2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Sair</button>
@@ -325,7 +326,9 @@ a.dep:hover b{color:var(--accent)}
     return h.slice(0,8)+"-"+h.slice(8,12)+"-"+h.slice(12,16)+"-"+h.slice(16,20)+"-"+h.slice(20);
   }
   function todayStr(){ var t = new Date().toLocaleDateString("pt-BR",{weekday:"long", day:"numeric", month:"long", year:"numeric"}); return t.charAt(0).toUpperCase()+t.slice(1); }
-  var TIPO = {emprestimo:"Empréstimo", aluguel:"Aluguel"};
+  var TIPO = {emprestimo:"Empréstimo", venda:"Venda", aluguel:"Aluguel"};
+  var TAG = {emprestimo:"g", venda:"o", aluguel:"a"};
+  var DO = {emprestimo:"do empréstimo", venda:"da venda", aluguel:"do aluguel"};
 
   /* ---------- tema ---------- */
   function currentTheme(){
@@ -405,10 +408,10 @@ a.dep:hover b{color:var(--accent)}
     return '<svg viewBox="0 0 180 180" role="img" aria-label="Progresso">'+arc(78, tp, "var(--accent)", 12) + arc(58, vp, "var(--ok)", 12) + arc(38, fp, "var(--warn)", 12)+'</svg>';
   }
   // barras: series = [{k, a, b}] com rótulos e cores de a e b; stack empilha as duas
-  function bars(series, ca, cb, na, nb, stack){
+  function bars(series, ca, cb, na, nb, stack, cc, nc){
     if (!series.length) return '<div class="empty">Os valores aparecem aqui mês a mês.</div>';
     var W=560, H=230, L=44, R=10, T=14, B=30, cw=W-L-R, ch=H-T-B;
-    var max = Math.max(1000, Math.max.apply(null, series.map(function(m){ return stack ? m.a + m.b : Math.max(m.a, m.b); })));
+    var max = Math.max(1000, Math.max.apply(null, series.map(function(m){ return stack ? m.a + m.b + (m.c||0) : Math.max(m.a, m.b); })));
     var step = max > 40000 ? 10000 : max > 20000 ? 5000 : max > 6000 ? 2000 : 1000;
     max = Math.ceil(max/step)*step;
     var s = '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Valores por mês">';
@@ -423,7 +426,10 @@ a.dep:hover b{color:var(--accent)}
       if (stack) {
         var bw = Math.min(26, slot/2.2);
         if (ha > 0) s += '<rect x="'+(cx-bw/2)+'" y="'+(base-ha)+'" width="'+bw+'" height="'+ha+'" rx="'+Math.min(6,ha/2)+'" fill="'+ca+'"><title>'+na+' em '+label(m.k)+': '+brl(m.a)+'</title></rect>';
-        if (hb > 0) s += '<rect x="'+(cx-bw/2)+'" y="'+(base-ha-hb-(ha>0?2:0))+'" width="'+bw+'" height="'+hb+'" rx="'+Math.min(6,hb/2)+'" fill="'+cb+'"><title>'+nb+' em '+label(m.k)+': '+brl(m.b)+'</title></rect>';
+        var y2 = base-ha-(ha>0?2:0);
+        if (hb > 0) { s += '<rect x="'+(cx-bw/2)+'" y="'+(y2-hb)+'" width="'+bw+'" height="'+hb+'" rx="'+Math.min(6,hb/2)+'" fill="'+cb+'"><title>'+nb+' em '+label(m.k)+': '+brl(m.b)+'</title></rect>'; y2 -= hb + 2; }
+        var hc = ch*(m.c||0)/max;
+        if (hc > 0) s += '<rect x="'+(cx-bw/2)+'" y="'+(y2-hc)+'" width="'+bw+'" height="'+hc+'" rx="'+Math.min(6,hc/2)+'" fill="'+cc+'"><title>'+nc+' em '+label(m.k)+': '+brl(m.c)+'</title></rect>';
       } else {
         var w = Math.min(22, slot/3.2);
         s += '<rect x="'+(cx-w-3)+'" y="'+(base-ha)+'" width="'+w+'" height="'+ha+'" rx="'+Math.min(w/2,Math.max(ha,0.1)/2)+'" fill="'+ca+'"><title>'+na+' em '+label(m.k)+': '+brl(m.a)+'</title></rect>';
@@ -454,7 +460,7 @@ a.dep:hover b{color:var(--accent)}
   function itemRow(it, k, showPerson){
     var p = byId(state.people, it.pessoa), pc = k.total ? Math.min(100, k.paid/k.total*100) : 0;
     var sub = (showPerson && p ? esc(p.nome)+' · ' : '') + (k.first ? (k.rows.length > 1 ? k.rows.length+' parcelas · '+lab(k.first)+' a '+lab(k.last) : 'vence '+lab(k.first)) : 'sem parcelas') + (k.rest > 0 ? ' · falta '+brl(k.rest) : '');
-    return '<tr><td><div class="m"><span class="tag '+(it.tipo==="aluguel"?"a":"g")+'">'+TIPO[it.tipo]+'</span>'+esc(it.desc)+'</div><div class="muted">'+sub+'</div></td>'+
+    return '<tr><td><div class="m"><span class="tag '+TAG[it.tipo]+'">'+TIPO[it.tipo]+'</span>'+esc(it.desc)+'</div><div class="muted">'+sub+'</div></td>'+
       '<td class="r">'+brl(k.total)+'</td><td class="r"><span class="rv">'+brl(k.paid)+'</span><div class="mini rmini"><i style="width:'+pc.toFixed(0)+'%"></i></div></td>'+
       '<td>'+statusPill(k)+'</td><td class="r"><a class="btn soft" href="#item/'+it.id+'" style="text-decoration:none">Abrir</a></td></tr>';
   }
@@ -467,7 +473,7 @@ a.dep:hover b{color:var(--accent)}
   function readRoute(){
     var h = location.hash.replace(/^#/,""), m = h.match(/^item\/([0-9a-f-]{36})$/);
     if (m) route = {v:"item", id:m[1]};
-    else if (h === "pessoas" || h.indexOf("pessoa/") === 0) route = {v:"pessoas", id:h.split("/")[1]||null};
+    else if (/^(clientes|pessoas|cliente\/|pessoa\/)/.test(h)) route = {v:"pessoas", id:h.split("/")[1]||null};
     else route = {v:"geral", id:null};
   }
   window.addEventListener("hashchange", function(){
@@ -504,8 +510,8 @@ a.dep:hover b{color:var(--accent)}
       paidRows.forEach(function(r){ if (r.mes > last) last = r.mes; });
       if (addMonths(last,-7) > first) first = addMonths(last,-7);
       var at = {};
-      for (var k = first; k <= last; k = addMonths(k,1)) { at[k] = {k:k, a:0, b:0}; months.push(at[k]); }
-      paidRows.forEach(function(r){ var m = at[r.mes]; if (m) { if (tipoOf[r.item] === "aluguel") m.a += r.pago; else m.b += r.pago; } });
+      for (var k = first; k <= last; k = addMonths(k,1)) { at[k] = {k:k, a:0, b:0, c:0}; months.push(at[k]); }
+      paidRows.forEach(function(r){ var m = at[r.mes]; if (m) { var t = tipoOf[r.item]; if (t === "aluguel") m.a += r.pago; else if (t === "venda") m.c += r.pago; else m.b += r.pago; } });
     }
     // próximos recebimentos: a próxima parcela de cada item
     var next = all.filter(function(x){ return x.k.next; }).map(function(x){ return {x:x, r:x.k.next}; })
@@ -518,7 +524,7 @@ a.dep:hover b{color:var(--accent)}
 
     document.getElementById("app").innerHTML =
       top("Controle financeiro", "Visão geral")+
-      (state.people.length ? '' : '<div class="card hello"><h2>Comece cadastrando uma pessoa</h2><p class="muted">Depois adicione os empréstimos e aluguéis dela e vá marcando o que recebe.</p><a class="btn" href="#pessoas" style="text-decoration:none">Cadastrar pessoa</a></div>')+
+      (state.people.length ? '' : '<div class="card hello"><h2>Comece cadastrando um cliente</h2><p class="muted">Depois adicione as vendas, empréstimos e aluguéis dele e vá marcando o que recebe.</p><a class="btn" href="#clientes" style="text-decoration:none">Cadastrar cliente</a></div>')+
       '<div class="stats emp4">'+
         '<div class="card stat hero"><div class="row1"><div class="ico">'+IC.wallet+'</div><span class="badge w">'+open.length+(open.length===1?' item em aberto':' itens em aberto')+'</span></div><div class="lbl">A receber</div><div class="num"><span class="big">'+brl(toGet)+'</span></div></div>'+
         '<div class="card stat"><div class="row1"><div class="ico">'+IC.check+'</div><span class="badge g">'+(whole ? Math.min(100, got/whole*100) : 0).toFixed(0)+'%</span></div><div class="lbl">Já recebido</div><div class="num"><span class="big">'+brl(got)+'</span><span class="muted">de '+brl(whole)+'</span></div></div>'+
@@ -527,20 +533,20 @@ a.dep:hover b{color:var(--accent)}
       '</div>'+
       (lateN ? '<div class="alert warn"><span><b>'+brl(late)+' em atraso</b> em '+lateN+(lateN>1?' itens':' item')+'. Abra o item para ver os meses.</span></div>' : '')+
       '<div class="grid">'+
-        '<div class="card chart"><div class="chead"><div><h2>Recebido por mês</h2><div class="muted">Aluguéis e empréstimos</div></div><div class="keys"><span><i style="background:var(--accent)"></i>Aluguel</span><span><i style="background:var(--ok)"></i>Empréstimo</span></div></div>'+bars(months, "var(--accent)", "var(--ok)", "Aluguel", "Empréstimo", true)+'</div>'+
+        '<div class="card chart"><div class="chead"><div><h2>Recebido por mês</h2><div class="muted">Vendas, empréstimos e aluguéis</div></div><div class="keys"><span><i style="background:var(--part)"></i>Venda</span><span><i style="background:var(--ok)"></i>Empréstimo</span><span><i style="background:var(--accent)"></i>Aluguel</span></div></div>'+bars(months, "var(--accent)", "var(--ok)", "Aluguel", "Empréstimo", true, "var(--part)", "Venda")+'</div>'+
         '<div class="card"><div class="chead"><div><h2>Próximos recebimentos</h2><div class="muted">A próxima parcela de cada item</div></div></div>'+
           (next.length ? '<div class="deps" style="margin:0">'+next.map(function(n){
             var p = byId(state.people, n.x.it.pessoa);
             return '<a class="dep nx" href="#item/'+n.x.it.id+'"><span><b>'+esc(p ? p.nome : "")+'</b><br><span class="muted">'+esc(n.x.it.desc)+' · '+lab(n.r.mes)+'</span></span><b>'+brl(n.r.prev - n.r.pago)+'</b>'+
-              '<span class="tag '+(n.x.it.tipo==="aluguel"?"a":"g")+'">'+TIPO[n.x.it.tipo]+'</span></a>';
+              '<span class="tag '+TAG[n.x.it.tipo]+'">'+TIPO[n.x.it.tipo]+'</span></a>';
           }).join('')+'</div>' : '<div class="empty">Nada para receber com data marcada.</div>')+'</div>'+
       '</div>'+
-      '<div class="card" id="ativos"><div class="chead"><div><h2>Em aberto</h2><div class="muted">Tudo o que ainda tem dinheiro para voltar</div></div><a class="btn" href="#pessoas" style="text-decoration:none">Pessoas</a></div>'+
+      '<div class="card" id="ativos"><div class="chead"><div><h2>Em aberto</h2><div class="muted">Tudo o que ainda tem dinheiro para voltar</div></div><a class="btn" href="#clientes" style="text-decoration:none">Clientes</a></div>'+
         (rows ? itemTable(rows) : '<div class="empty">Nada em aberto.</div>')+
-        (done ? '<div class="muted small" style="margin-top:10px">'+done+(done>1?' itens quitados ficam':' item quitado fica')+' na página de cada pessoa.</div>' : '')+'</div>';
+        (done ? '<div class="muted small" style="margin-top:10px">'+done+(done>1?' itens quitados ficam':' item quitado fica')+' na página de cada cliente.</div>' : '')+'</div>';
 
     document.getElementById("promo").innerHTML = '<div class="small">A receber no total</div><div class="val">'+brl(toGet)+'</div>'+
-      '<a class="btn" href="#pessoas" style="text-align:center;text-decoration:none">Ver pessoas</a>';
+      '<a class="btn" href="#clientes" style="text-align:center;text-decoration:none">Ver clientes</a>';
   }
 
   /* ---------- pessoas ---------- */
@@ -561,6 +567,15 @@ a.dep:hover b{color:var(--accent)}
           '<label>Renovação (meses, opcional)<input name="renov" inputmode="numeric" placeholder="12" style="width:90px"></label>'+
           '<label>Observação<input name="obs" style="width:170px" maxlength="500"></label>'+
           '<button class="btn" type="submit">Criar aluguel</button><button class="btn ghost" type="button" data-cancel="1">Cancelar</button></form>'
+        : ui.newTipo === "venda" ?
+        '<form class="buyform newitem" data-p="'+p.id+'" data-t="venda"><b class="ftitle">Nova venda</b>'+
+          '<label>O que foi vendido<input name="desc" placeholder="ex.: Câmera R6 Mark II" style="width:200px" maxlength="120" required></label>'+
+          '<label>Valor<input name="valor" inputmode="numeric" placeholder="R$ 10.500" style="width:120px" required></label>'+
+          '<label>Data da venda<input name="data" type="date" value="'+isoToday()+'"></label>'+
+          '<label>Parcelas<input name="n" inputmode="numeric" value="1" style="width:70px"></label>'+
+          '<label>Primeiro vencimento<input name="mes" type="month" value="'+addMonths(nowKey(),1)+'"></label>'+
+          '<label>Observação<input name="obs" style="width:170px" maxlength="500"></label>'+
+          '<button class="btn" type="submit">Criar venda</button><button class="btn ghost" type="button" data-cancel="1">Cancelar</button></form>'
         : '<form class="buyform newitem" data-p="'+p.id+'" data-t="emprestimo"><b class="ftitle">Novo empréstimo</b>'+
           '<label>Descrição<input name="desc" value="Empréstimo" style="width:170px" maxlength="120"></label>'+
           '<label>Valor<input name="valor" inputmode="numeric" placeholder="R$ 5.000" style="width:120px" required></label>'+
@@ -574,7 +589,7 @@ a.dep:hover b{color:var(--accent)}
           '<label>Contato<input name="contato" value="'+esc(p.contato||"")+'" maxlength="120" style="width:160px"></label>'+
           '<label>Observação<input name="obs" value="'+esc(p.obs||"")+'" maxlength="500" style="width:200px"></label>'+
           '<button class="btn" type="submit">Salvar</button><button class="btn ghost" type="button" data-cancel="1">Cancelar</button>'+
-          '<button class="linkbtn" type="button" data-pdel="'+p.id+'">Excluir pessoa</button></form>' : '';
+          '<button class="linkbtn" type="button" data-pdel="'+p.id+'">Excluir cliente</button></form>' : '';
       return '<div class="card pcard" id="p-'+p.id+'"><div class="chead"><div><h2>'+esc(p.nome)+'</h2><div class="muted">'+
           [p.contato ? esc(p.contato) : '', c.n ? c.n+(c.n>1?' itens':' item') : 'nenhum item ainda', p.obs ? esc(p.obs) : ''].filter(Boolean).join(' · ')+'</div></div>'+
           '<div class="pright">'+(c.rest > 0 ? '<span class="badge a">a receber '+brl(c.rest)+'</span>' : c.n ? '<span class="badge g">tudo quitado</span>' : '')+
@@ -582,18 +597,18 @@ a.dep:hover b{color:var(--accent)}
         edit+
         (its.length ? itemTable(its.map(function(x){ return itemRow(x.it, x.k, false); }).join("")) : '')+
         form+
-        '<div class="pactions"><button class="btn soft" data-new="emprestimo" data-p="'+p.id+'">+ Empréstimo</button><button class="btn soft" data-new="aluguel" data-p="'+p.id+'">+ Aluguel</button>'+
-          (ui.editPerson === p.id ? '' : '<button class="linkbtn" data-edit="'+p.id+'">Editar pessoa</button>')+'</div></div>';
+        '<div class="pactions"><button class="btn soft" data-new="venda" data-p="'+p.id+'">+ Venda</button><button class="btn soft" data-new="emprestimo" data-p="'+p.id+'">+ Empréstimo</button><button class="btn soft" data-new="aluguel" data-p="'+p.id+'">+ Aluguel</button>'+
+          (ui.editPerson === p.id ? '' : '<button class="linkbtn" data-edit="'+p.id+'">Editar cliente</button>')+'</div></div>';
     }).join("");
     var tot = sum(state.people, function(p){ return personCalc(p.id).rest; });
     document.getElementById("app").innerHTML =
-      top("Controle financeiro", "Pessoas")+
-      '<div class="card"><div class="chead"><div><h2>Nova pessoa</h2><div class="muted">Cadastre quem pegou emprestado ou alugou algo seu</div></div></div>'+
+      top("Controle financeiro", "Clientes")+
+      '<div class="card"><div class="chead"><div><h2>Novo cliente</h2><div class="muted">Cadastre quem comprou, pegou emprestado ou alugou algo seu</div></div></div>'+
         '<form class="buyform" id="personForm" style="margin-top:0"><label for="npNome">Nome<input id="npNome" maxlength="80" placeholder="ex.: João" style="width:180px"></label>'+
         '<label for="npCont">Contato (opcional)<input id="npCont" maxlength="120" placeholder="telefone ou e-mail" style="width:180px"></label>'+
         '<button class="btn" type="submit">Adicionar</button></form><div class="err small" id="npErr"></div></div>'+
-      (cards || '<div class="card"><div class="empty">Nenhuma pessoa cadastrada ainda.</div></div>');
-    document.getElementById("promo").innerHTML = '<div class="small">'+state.people.length+(state.people.length===1?' pessoa':' pessoas')+' · a receber</div><div class="val">'+brl(tot)+'</div>'+
+      (cards || '<div class="card"><div class="empty">Nenhum cliente cadastrado ainda.</div></div>');
+    document.getElementById("promo").innerHTML = '<div class="small">'+state.people.length+(state.people.length===1?' cliente':' clientes')+' · a receber</div><div class="val">'+brl(tot)+'</div>'+
       '<a class="btn" href="#geral" style="text-align:center;text-decoration:none">Visão geral</a>';
 
     document.getElementById("personForm").addEventListener("submit", function(e){
@@ -632,7 +647,7 @@ a.dep:hover b{color:var(--accent)}
   function createItem(f){
     var tipo = f.dataset.t, valor = num(f.valor.value), n = Math.max(1, Math.min(120, num(f.n.value) || 1)), mes = f.mes.value || nowKey();
     if (!(valor > 0)) { f.valor.focus(); return null; }
-    var desc = f.desc.value.trim() || (tipo === "aluguel" ? "Aluguel" : "Empréstimo");
+    var desc = f.desc.value.trim() || TIPO[tipo];
     var it = {id:uuid(), pessoa:f.dataset.p, tipo:tipo, desc:desc, inicio: tipo === "aluguel" ? mes+"-01" : (f.data.value || isoToday()),
       mensal: tipo === "aluguel" ? valor : null, compra: tipo === "aluguel" ? (num(f.compra.value) || null) : null,
       renov: tipo === "aluguel" ? (num(f.renov.value) || null) : null, escolha:null, obs:f.obs.value.trim() || null};
@@ -700,20 +715,21 @@ a.dep:hover b{color:var(--accent)}
     }
 
     var peopleOpts = state.people.map(function(x){ return '<option value="'+x.id+'"'+(x.id===it.pessoa?' selected':'')+'>'+esc(x.nome)+'</option>'; }).join("");
-    var dados = '<div class="card" id="dados"><div class="chead"><div><h2>Dados do '+(aluguel ? 'aluguel' : 'empréstimo')+'</h2><div class="muted">'+(aluguel ? 'Início '+fmtDate(it.inicio) : 'Emprestado em '+fmtDate(it.inicio))+(it.obs ? ' · '+esc(it.obs) : '')+'</div></div>'+
+    var dados = '<div class="card" id="dados"><div class="chead"><div><h2>Dados '+DO[it.tipo]+'</h2><div class="muted">'+(aluguel ? 'Início ' : it.tipo === "venda" ? 'Vendido em ' : 'Emprestado em ')+fmtDate(it.inicio)+(it.obs ? ' · '+esc(it.obs) : '')+'</div></div>'+
       (editItem ? '' : '<button class="btn soft" id="editItem">Editar</button>')+'</div>'+
       (editItem ? '<form class="buyform" id="itemForm" style="margin-top:0"><label>Descrição<input name="desc" value="'+esc(it.desc)+'" maxlength="120" style="width:200px" required></label>'+
-        '<label>Pessoa<select name="pessoa">'+peopleOpts+'</select></label>'+
-        '<label>'+(aluguel ? 'Início' : 'Data do empréstimo')+'<input name="inicio" type="date" value="'+it.inicio+'"></label>'+
+        '<label>Tipo<select name="tipo">'+["venda","emprestimo","aluguel"].map(function(t){ return '<option value="'+t+'"'+(t===it.tipo?' selected':'')+'>'+TIPO[t]+'</option>'; }).join("")+'</select></label>'+
+        '<label>Cliente<select name="pessoa">'+peopleOpts+'</select></label>'+
+        '<label>'+(aluguel ? 'Início' : it.tipo === "venda" ? 'Data da venda' : 'Data do empréstimo')+'<input name="inicio" type="date" value="'+it.inicio+'"></label>'+
         (aluguel ? '<label>Mensalidade<input name="mensal" inputmode="numeric" value="'+(it.mensal||"")+'" style="width:110px"></label>'+
           '<label>Opção de compra<input name="compra" inputmode="numeric" value="'+(it.compra||"")+'" style="width:110px"></label>'+
           '<label>Renovação (meses)<input name="renov" inputmode="numeric" value="'+(it.renov||"")+'" style="width:80px"></label>' : '')+
         '<label>Observação<input name="obs" value="'+esc(it.obs||"")+'" maxlength="500" style="width:200px"></label>'+
         '<button class="btn" type="submit">Salvar</button><button class="btn ghost" type="button" id="cancelItem">Cancelar</button>'+
-        '<button class="linkbtn" type="button" id="delItem">Excluir '+(aluguel ? 'aluguel' : 'empréstimo')+'</button></form>' : '')+'</div>';
+        '<button class="linkbtn" type="button" id="delItem">Excluir '+TIPO[it.tipo].toLowerCase()+'</button></form>' : '')+'</div>';
 
     document.getElementById("app").innerHTML =
-      top(TIPO[it.tipo]+(p ? ' · '+esc(p.nome) : ''), esc(it.desc), {href:"#pessoa/"+it.pessoa, t: p ? p.nome : "Pessoas"})+
+      top(TIPO[it.tipo]+(p ? ' · '+esc(p.nome) : ''), esc(it.desc), {href:"#cliente/"+it.pessoa, t: p ? p.nome : "Clientes"})+
       '<div class="grid">'+
         '<div class="stats">'+
           '<div class="card stat hero"><div class="row1"><div class="ico">'+IC.wallet+'</div><span class="badge w">'+k.open+(k.open===1?' parcela':' parcelas')+'</span></div><div class="lbl">Falta receber</div><div class="num"><span class="big">'+brl(k.rest)+'</span><span class="muted">de '+brl(k.total)+'</span></div></div>'+
@@ -780,14 +796,14 @@ a.dep:hover b{color:var(--accent)}
     var ci = document.getElementById("cancelItem"); if (ci) ci.onclick = function(){ editItem = false; render(); };
     var di = document.getElementById("delItem"); if (di) di.onclick = function(){
       if (!confirm("Excluir "+it.desc+" de "+(p ? p.nome : "")+" com todo o controle de pagamento?")) return;
-      var pid = it.pessoa; removeItem(it.id); editItem = false; changed(); location.hash = "#pessoa/"+pid;
+      var pid = it.pessoa; removeItem(it.id); editItem = false; changed(); location.hash = "#cliente/"+pid;
     };
     var itf = document.getElementById("itemForm");
     if (itf) itf.addEventListener("submit", function(e){
       e.preventDefault();
       if (!itf.desc.value.trim()) return itf.desc.focus();
-      it.desc = itf.desc.value.trim(); it.pessoa = itf.pessoa.value; it.inicio = itf.inicio.value || it.inicio; it.obs = itf.obs.value.trim() || null;
-      if (aluguel) { it.mensal = num(itf.mensal.value) || null; it.compra = num(itf.compra.value) || null; it.renov = num(itf.renov.value) || null; }
+      it.desc = itf.desc.value.trim(); it.pessoa = itf.pessoa.value; it.tipo = itf.tipo.value; it.inicio = itf.inicio.value || it.inicio; it.obs = itf.obs.value.trim() || null;
+      if (aluguel && it.tipo === "aluguel") { it.mensal = num(itf.mensal.value) || null; it.compra = num(itf.compra.value) || null; it.renov = num(itf.renov.value) || null; }
       editItem = false; changed();
     });
   }
@@ -937,7 +953,7 @@ a.dep:hover b{color:var(--accent)}
   }
   function showLogin(msg){
     authEl().innerHTML = '<form class="authcard" id="loginForm" autocomplete="on">'+AUTHBRAND+
-      '<div><h2>Controle financeiro</h2><p>Entre para ver pessoas, empréstimos e aluguéis.</p></div>'+
+      '<div><h2>Controle financeiro</h2><p>Entre para ver clientes, vendas, empréstimos e aluguéis.</p></div>'+
       '<label for="lEmail">E-mail<input id="lEmail" type="email" autocomplete="username" required></label>'+
       '<label for="lPass">Senha<input id="lPass" type="password" autocomplete="current-password" required></label>'+
       '<div class="err" id="lErr">'+(msg||"")+'</div><button class="btn" type="submit" id="lBtn">Entrar</button>'+
@@ -1013,7 +1029,7 @@ a.dep:hover b{color:var(--accent)}
     var o = JSON.parse(text);
     if (!o || o.versao !== 2 || !Array.isArray(o.people) || !Array.isArray(o.items) || !Array.isArray(o.parc)) throw new Error("bad");
     var ok = {}; o.people.forEach(function(p){ ok[p.id] = 1; });
-    var items = o.items.filter(function(i){ return ok[i.pessoa] && (i.tipo === "aluguel" || i.tipo === "emprestimo"); }), ik = {};
+    var items = o.items.filter(function(i){ return ok[i.pessoa] && TIPO[i.tipo]; }), ik = {};
     items.forEach(function(i){ ik[i.id] = 1; });
     return {people:o.people, items:items, parc:o.parc.filter(function(r){ return ik[r.item] && /^\d{4}-\d{2}$/.test(r.mes); }),
       res:(o.res||[]).filter(function(r){ return ik[r.item]; }), gerado:o.gerado};
@@ -1025,7 +1041,7 @@ a.dep:hover b{color:var(--accent)}
     ov.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-label="Backup dos dados">'+
       '<div class="chead" style="margin:0"><h2>Backup dos dados</h2><button class="iconbtn" id="dClose" aria-label="Fechar" style="width:34px;height:34px">×</button></div>'+
       '<p>Os dados ficam no banco e aparecem em todos os aparelhos depois do login. Aqui você baixa uma cópia em arquivo ou restaura uma cópia.</p>'+
-      '<div class="info"><span><b>Conta:</b> '+esc(S.user.email||"")+'</span><span><b>'+state.people.length+'</b> pessoas · <b>'+state.items.length+'</b> itens · a receber <b>'+brl(tot)+'</b></span></div>'+
+      '<div class="info"><span><b>Conta:</b> '+esc(S.user.email||"")+'</span><span><b>'+state.people.length+'</b> clientes · <b>'+state.items.length+'</b> itens · a receber <b>'+brl(tot)+'</b></span></div>'+
       '<div class="row2"><button class="btn" id="dExport">Baixar cópia</button><button class="btn soft" id="dImport">Restaurar cópia</button></div>'+
       '<input type="file" id="dFile" accept=".json,application/json" hidden><div id="dMsg"></div></div>';
     document.body.appendChild(ov);
@@ -1041,7 +1057,7 @@ a.dep:hover b{color:var(--accent)}
       r.onload = function(){
         var o;
         try { o = parseBackup(String(r.result)); } catch(e){ return note("bad","Esse arquivo não é uma cópia do controle financeiro."); }
-        note("bad", 'Cópia de <b>'+when(o.gerado)+'</b> com '+o.people.length+' pessoas e '+o.items.length+' itens. Restaurar troca <b>tudo</b> o que está no banco por ela.'+
+        note("bad", 'Cópia de <b>'+when(o.gerado)+'</b> com '+o.people.length+' clientes e '+o.items.length+' itens. Restaurar troca <b>tudo</b> o que está no banco por ela.'+
           '<div class="row2" style="margin-top:10px"><button class="btn" id="dApply">Restaurar</button><button class="btn ghost" id="dCancel">Cancelar</button></div>');
         document.getElementById("dApply").onclick = function(){ state = {people:o.people, items:o.items, parc:o.parc, res:o.res}; closeData(); changed(); };
         document.getElementById("dCancel").onclick = function(){ document.getElementById("dMsg").innerHTML = ""; };
