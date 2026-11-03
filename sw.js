@@ -1,5 +1,5 @@
 // Guarda só os arquivos do app para abrir rápido. Os dados ficam no banco e nunca passam por este cache.
-const CACHE = "financeiro-v6";
+const CACHE = "financeiro-v7";
 const FILES = ["./", "./index.html", "./config.js", "./manifest.webmanifest", "./icon-180.png", "./icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener("activate", e => {
